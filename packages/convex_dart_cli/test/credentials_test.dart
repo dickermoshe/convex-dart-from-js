@@ -194,9 +194,7 @@ void main() {
     test('rejects anonymous CONVEX_DEPLOYMENT', () async {
       expect(
         () => resolveCredentialsFromEnv(
-          envFromMap({
-            convexDeploymentEnvVar: 'dev:anonymous-abc123',
-          }),
+          envFromMap({convexDeploymentEnvVar: 'dev:anonymous-abc123'}),
           readGlobalConfigFn: () => 'token',
         ),
         throwsA(
