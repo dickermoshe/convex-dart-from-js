@@ -6,7 +6,7 @@ on:
   pull_request:
 
 jobs:
-  unit:
+  convex_dart_unit:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -14,19 +14,27 @@ jobs:
         with:
           sdk: stable
       - run: dart pub get
-      - run: dart format --set-exit-if-changed .
-      - run: dart analyze
-      - run: dart test --exclude-tags integration packages/convex_dart/test packages/convex_dart_cli/test
+      - run: dart format --set-exit-if-changed packages/convex_dart
+      - run: dart analyze packages/convex_dart
+      - run: dart test --exclude-tags integration packages/convex_dart/test
 
-  integration:
+  convex_dart_cli_unit:
     runs-on: ubuntu-latest
-    needs: unit
     steps:
       - uses: actions/checkout@v4
       - uses: dart-lang/setup-dart@v1
         with:
           sdk: stable
       - run: dart pub get
+      - run: dart format --set-exit-if-changed packages/convex_dart_cli
+      - run: dart analyze packages/convex_dart_cli
+      - run: dart test --exclude-tags integration packages/convex_dart_cli/test
+
+  deploy:
+    runs-on: ubuntu-latest
+    needs: [convex_dart_unit, convex_dart_cli_unit]
+    steps:
+      - uses: actions/checkout@v4
       - name: Deploy integration test backend
         working-directory: packages/convex_dart/convex-test
         env:
@@ -34,11 +42,33 @@ jobs:
         run: |
           npm ci
           npx convex deploy
+
+  convex_dart_integration:
+    runs-on: ubuntu-latest
+    needs: deploy
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dart-lang/setup-dart@v1
+        with:
+          sdk: stable
+      - run: dart pub get
       - name: Run integration tests
         env:
           CONVEX_URL: ${{ secrets.CONVEX_URL }}
           CONVEX_AUTH_TOKEN: ${{ secrets.CONVEX_AUTH_TOKEN }}
+        run: dart test packages/convex_dart/test/integration/
+
+  convex_dart_cli_integration:
+    runs-on: ubuntu-latest
+    needs: deploy
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dart-lang/setup-dart@v1
+        with:
+          sdk: stable
+      - run: dart pub get
+      - name: Run integration tests
+        env:
+          CONVEX_URL: ${{ secrets.CONVEX_URL }}
           CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_DEPLOY_KEY }}
-        run: |
-          dart test packages/convex_dart/test/integration/
-          dart test packages/convex_dart_cli/test/integration/
+        run: dart test packages/convex_dart_cli/test/integration/
