@@ -1,15 +1,16 @@
 name: convex_dart_cli
-description: Subscribe to Convex function metadata over WebSocket and emit JSON on changes.
-version: 0.1.0
-publish_to: none
+description: Dart CLI for watching Convex function metadata.
+version: 1.41.0
 resolution: workspace
+
+executables:
+  convex_dart_cli:
 
 environment:
   sdk: ^3.10.7
 
 dependencies:
-  convex_dart:
-    path: ../../packages/convex_dart
+  convex_dart: 1.41.0
   dotenv: ^4.2.0
   http: ^1.6.0
   path: ^1.9.1

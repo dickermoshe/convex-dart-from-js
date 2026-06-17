@@ -1,8 +1,8 @@
+import 'messages.dart';
 import 'package:dotenv/dotenv.dart';
 
 import 'big_brain.dart';
 import 'env.dart';
-import 'local_deployment.dart';
 import 'dart:convert';
 import 'dart:io';
 
@@ -21,28 +21,21 @@ Future<DeploymentCredentials> resolveCredentials({
   String? workingDirectory,
   BigBrainClient? bigBrain,
   String? Function()? readGlobalConfigFn,
-  LocalDeploymentConfig? Function(String deploymentName)?
-  loadLocalDeploymentConfigFn,
 }) async {
   final env = loadEnv(envFile: envFile, workingDirectory: workingDirectory);
   return resolveCredentialsFromEnv(
     env,
     prod: prod,
-    workingDirectory: workingDirectory,
     bigBrain: bigBrain,
     readGlobalConfigFn: readGlobalConfigFn,
-    loadLocalDeploymentConfigFn: loadLocalDeploymentConfigFn,
   );
 }
 
 Future<DeploymentCredentials> resolveCredentialsFromEnv(
   DotEnv env, {
   bool prod = false,
-  String? workingDirectory,
   BigBrainClient? bigBrain,
   String? Function()? readGlobalConfigFn,
-  LocalDeploymentConfig? Function(String deploymentName)?
-  loadLocalDeploymentConfigFn,
 }) async {
   final selfHostedUrl = envGet(env, convexSelfHostedUrlEnvVar);
   final selfHostedAdminKey = envGet(env, convexSelfHostedAdminKeyEnvVar);
@@ -65,7 +58,7 @@ Future<DeploymentCredentials> resolveCredentialsFromEnv(
 
   final convexDeployment = envGet(env, convexDeploymentEnvVar);
   if (convexDeployment == null) {
-    throw Exception(_missingCredentialsMessage);
+    throw Exception(missingCredentialsMessage);
   }
 
   final deploymentName = stripDeploymentTypePrefix(convexDeployment);
@@ -73,27 +66,14 @@ Future<DeploymentCredentials> resolveCredentialsFromEnv(
     convexDeployment,
   );
 
-  if (deploymentType == 'local') {
-    final localConfig =
-        (loadLocalDeploymentConfigFn ??
-        (name) => loadLocalDeploymentConfig(
-          name,
-          projectDir: workingDirectory,
-        ))(deploymentName);
-    if (localConfig == null) {
-      throw Exception(
-        'No local deployment found. Run `npx convex dev --configure`.',
-      );
-    }
-    return DeploymentCredentials(
-      url: localDeploymentUrl(localConfig.cloudPort),
-      adminKey: localConfig.adminKey,
-    );
-  }
+  _rejectUnsupportedConfiguredDeployment(
+    deploymentType: deploymentType,
+    deploymentName: deploymentName,
+  );
 
   final accessToken = (readGlobalConfigFn ?? readAccessToken)();
   if (accessToken == null) {
-    throw Exception(_missingCredentialsMessage);
+    throw Exception(missingCredentialsMessage);
   }
 
   final client = bigBrain ?? BigBrainClient(bearerToken: accessToken);
@@ -112,6 +92,21 @@ Future<DeploymentCredentials> resolveCredentialsFromEnv(
     if (bigBrain == null) {
       client.close();
     }
+  }
+}
+
+void _rejectUnsupportedConfiguredDeployment({
+  required String? deploymentType,
+  required String deploymentName,
+}) {
+  if (deploymentType == 'local') {
+    throw Exception(localDeploymentUnsupportedMessage);
+  }
+  if (deploymentType == 'preview') {
+    throw Exception(previewDeploymentUnsupportedMessage);
+  }
+  if (isAnonymousDeployment(deploymentName)) {
+    throw Exception(anonymousDeploymentUnsupportedMessage);
   }
 }
 
@@ -139,10 +134,6 @@ String? readAccessToken() {
     return null;
   }
 }
-
-const _missingCredentialsMessage =
-    'Could not resolve deployment credentials. '
-    'Run `npx convex login` and `npx convex dev` in this project.';
 
 Future<DeploymentCredentials> _resolveDeployKeyCredentials(
   String deployKey, {

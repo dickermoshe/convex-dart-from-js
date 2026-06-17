@@ -73,5 +73,10 @@ TOKEN='abc'
       expect(isDeploymentKey('prod:name|secret'), isTrue);
       expect(isDeploymentKey('preview:name|secret'), isFalse);
     });
+
+    test('isAnonymousDeployment recognizes anonymous deployment names', () {
+      expect(isAnonymousDeployment('anonymous-abc123'), isTrue);
+      expect(isAnonymousDeployment('joyful-capybara-123'), isFalse);
+    });
   });
 }

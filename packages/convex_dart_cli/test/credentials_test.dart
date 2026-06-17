@@ -3,7 +3,6 @@ import 'package:dotenv/dotenv.dart';
 import '../lib/big_brain.dart';
 import '../lib/credentials.dart';
 import '../lib/env.dart';
-import '../lib/local_deployment.dart';
 import 'package:test/test.dart';
 
 class FakeBigBrainClient extends BigBrainClient {
@@ -161,16 +160,53 @@ void main() {
       expect(credentials.adminKey, 'dev:my-dep|secret');
     });
 
-    test('uses local deployment config for local CONVEX_DEPLOYMENT', () async {
-      final credentials = await resolveCredentialsFromEnv(
-        envFromMap({convexDeploymentEnvVar: 'local:my-local'}),
-        loadLocalDeploymentConfigFn: (_) => const LocalDeploymentConfig(
-          adminKey: 'local-admin',
-          cloudPort: 3210,
+    test('rejects local CONVEX_DEPLOYMENT', () async {
+      expect(
+        () => resolveCredentialsFromEnv(
+          envFromMap({convexDeploymentEnvVar: 'local:my-local'}),
+        ),
+        throwsA(
+          isA<Exception>().having(
+            (e) => e.toString(),
+            'message',
+            contains('Local Convex deployments are not supported'),
+          ),
         ),
       );
-      expect(credentials.url, 'http://127.0.0.1:3210');
-      expect(credentials.adminKey, 'local-admin');
+    });
+
+    test('rejects preview CONVEX_DEPLOYMENT', () async {
+      expect(
+        () => resolveCredentialsFromEnv(
+          envFromMap({convexDeploymentEnvVar: 'preview:my-preview'}),
+          readGlobalConfigFn: () => 'token',
+        ),
+        throwsA(
+          isA<Exception>().having(
+            (e) => e.toString(),
+            'message',
+            contains('Preview deployments'),
+          ),
+        ),
+      );
+    });
+
+    test('rejects anonymous CONVEX_DEPLOYMENT', () async {
+      expect(
+        () => resolveCredentialsFromEnv(
+          envFromMap({
+            convexDeploymentEnvVar: 'dev:anonymous-abc123',
+          }),
+          readGlobalConfigFn: () => 'token',
+        ),
+        throwsA(
+          isA<Exception>().having(
+            (e) => e.toString(),
+            'message',
+            contains('Anonymous Convex deployments are not supported'),
+          ),
+        ),
+      );
     });
 
     test('authorizes logged-in dev deployment', () async {

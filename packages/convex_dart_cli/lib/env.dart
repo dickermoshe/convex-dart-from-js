@@ -62,6 +62,10 @@ String? readDeployKeyFromEnv(DotEnv env) =>
 String stripDeploymentTypePrefix(String deployment) =>
     deployment.split(':').last;
 
+/// Anonymous agent-mode deployments use names like `anonymous-...`.
+bool isAnonymousDeployment(String deploymentName) =>
+    deploymentName.startsWith('anonymous-');
+
 /// Returns `dev`, `prod`, `preview`, `local`, or null if no recognized prefix.
 String? getDeploymentTypeFromConfiguredDeployment(String raw) {
   final typeRaw = raw.split(':').first;
