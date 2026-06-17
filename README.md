@@ -1,1 +1,1 @@
-This project tracks commit `a8d6893e97fc99b9c55b18637fd1b6a340b5522b` of `convex-backend` which is version `v1.41.0` of `convex-js`
+This project tracks `convex-js` tag `npm/1.41.0`
