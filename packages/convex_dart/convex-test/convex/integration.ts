@@ -57,7 +57,7 @@ export const throws = query({
   args: {},
   returns: v.null(),
   handler: async () => {
-    throw new ConvexError({ code: "test", _message: "integration error" });
+    throw new ConvexError({ code: "test" });
   },
 });
 

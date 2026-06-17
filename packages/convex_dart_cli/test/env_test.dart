@@ -1,6 +1,6 @@
 import 'dart:io';
 
-import '../lib/env.dart';
+import 'package:convex_dart_cli/env.dart';
 import 'package:path/path.dart' as p;
 import 'package:test/test.dart';
 

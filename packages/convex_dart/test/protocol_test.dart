@@ -22,11 +22,15 @@ void main() {
         returnsNormally,
       );
       expect(
+        () => validateDeploymentUrl('https://example.com'),
+        returnsNormally,
+      );
+      expect(
         () => validateDeploymentUrl('ftp://example.com'),
         throwsArgumentError,
       );
       expect(
-        () => validateDeploymentUrl('https://example.com'),
+        () => validateDeploymentUrl('https://example.convex.site'),
         throwsArgumentError,
       );
     });

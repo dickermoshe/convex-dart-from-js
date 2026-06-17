@@ -8,20 +8,20 @@ Map<String, Object?> parseArgs(Map<String, Object?>? args) {
 void validateDeploymentUrl(String deploymentUrl) {
   final uri = Uri.tryParse(deploymentUrl);
   if (uri == null || !uri.hasScheme || uri.host.isEmpty) {
-    throw ArgumentError('Provided address was not an absolute URL.');
+    throw ArgumentError(
+      'Invalid deployment address: "$deploymentUrl" is not a valid URL.',
+    );
   }
   if (uri.scheme != 'http' && uri.scheme != 'https') {
-    throw ArgumentError('Unknown parent protocol ${uri.scheme}');
+    throw ArgumentError(
+      'Invalid deployment address: Must start with "https://" or "http://". Found "$deploymentUrl".',
+    );
   }
-  if (uri.host == 'localhost' ||
-      uri.host == '127.0.0.1' ||
-      uri.host.endsWith('.convex.cloud') ||
-      uri.host.endsWith('.convex.site')) {
-    return;
+  if (deploymentUrl.endsWith('.convex.site')) {
+    throw ArgumentError(
+      'Invalid deployment address: "$deploymentUrl" ends with .convex.site, which is used for HTTP Actions.',
+    );
   }
-  throw ArgumentError(
-    'Invalid Convex deployment URL $deploymentUrl. If running a self-hosted backend, set skipConvexDeploymentUrlCheck.',
-  );
 }
 
 bool isSimpleObject(Object? value) => value is Map<String, Object?>;

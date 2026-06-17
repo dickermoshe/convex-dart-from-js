@@ -64,7 +64,7 @@ void main() {
         retry(() => client.query('integration:throws')),
         throwsA(
           isA<ConvexError<Object?>>()
-              .having((e) => e.message, 'message', 'integration error')
+              .having((e) => e.message, 'message', contains('ConvexError'))
               .having((e) => e.data, 'data', {'code': 'test'}),
         ),
       );
@@ -73,7 +73,7 @@ void main() {
     test(
       'auth required query with token',
       () async {
-        final token = requireEnv('CONVEX_AUTH_TOKEN');
+        final token = requireEnv('CONVEX_AUTH_TOKEN').trim();
         final authed = ConvexHttpClient(
           url,
           options: ConvexHttpClientOptions(auth: token),

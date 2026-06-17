@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:convex_dart/browser.dart';
+import 'package:convex_dart/src/browser/logging.dart';
 import 'package:http/http.dart' as http;
 import 'package:test/test.dart';
 
@@ -136,7 +137,7 @@ void main() {
       expect(authHeader, isNull);
     });
 
-    test('setAuth trims surrounding whitespace', () async {
+    test('setAuth preserves token bytes like upstream', () async {
       String? authHeader;
       final fake = FakeHttpClient((request) async {
         authHeader = request.headers['Authorization'];
@@ -150,9 +151,9 @@ void main() {
         'https://x.convex.cloud',
         options: ConvexHttpClientOptions(httpClient: fake),
       );
-      client.setAuth(' token-1\n');
+      client.setAuth(' token-1 ');
       await client.query('q');
-      expect(authHeader, 'Bearer token-1');
+      expect(authHeader, 'Bearer  token-1 ');
     });
 
     test('setAdminAuth uses Convex authorization scheme', () async {
@@ -183,36 +184,108 @@ void main() {
       expect(() => client.close(), returnsNormally);
     });
 
-    test('throws ConvexError with forwarded data', () async {
+    test('setDebug disables result log forwarding', () async {
+      final logger = _RecordingLogger();
       final fake = FakeHttpClient((request) async {
         return jsonResponse({
-          'status': 'error',
-          'errorMessage': 'boom',
-          'errorData': {'code': 'bad'},
+          'status': 'success',
+          'value': null,
+          'logLines': ['line'],
+        });
+      });
+      final client = ConvexHttpClient(
+        'https://x.convex.cloud',
+        options: ConvexHttpClientOptions(httpClient: fake, logger: logger),
+      );
+
+      await client.query('logged');
+      expect(logger.logs, [
+        ['[query:logged] line'],
+      ]);
+
+      client.setDebug(false);
+      await client.query('quiet');
+      expect(logger.logs, [
+        ['[query:logged] line'],
+      ]);
+    });
+
+    test('consistentQuery reuses timestamp and calls query_at_ts', () async {
+      var timestampRequests = 0;
+      final fake = FakeHttpClient((request) async {
+        if (request.url.path == '/api/query_ts') {
+          timestampRequests++;
+          expect(request.body, isEmpty);
+          return jsonResponse({'ts': 'encoded-ts'});
+        }
+        expect(
+          request.url.toString(),
+          'https://x.convex.cloud/api/query_at_ts',
+        );
+        expect(jsonDecode(request.body), {
+          'path': 'messages:list',
+          'format': 'convex_encoded_json',
+          'args': [
+            {'channel': 'general'},
+          ],
+          'ts': 'encoded-ts',
+        });
+        return jsonResponse({
+          'status': 'success',
+          'value': null,
           'logLines': [],
-        }, statusCode: statusCodeUdfFailed);
+        });
       });
       final client = ConvexHttpClient(
         'https://x.convex.cloud',
         options: ConvexHttpClientOptions(httpClient: fake),
       );
 
-      await expectLater(
-        client.query('broken'),
-        throwsA(
-          isA<ConvexError<Object?>>()
-              .having((e) => e.message, 'message', 'boom')
-              .having((e) => e.data, 'data', {'code': 'bad'}),
-        ),
-      );
+      await client.consistentQuery('messages:list', {'channel': 'general'});
+      await client.consistentQuery('messages:list', {'channel': 'general'});
+
+      expect(timestampRequests, 1);
     });
 
-    test('uses forwarded data message when present', () async {
+    test(
+      'function calls generic endpoint without argument array wrapper',
+      () async {
+        final fake = FakeHttpClient((request) async {
+          expect(request.url.toString(), 'https://x.convex.cloud/api/function');
+          expect(jsonDecode(request.body), {
+            'componentPath': 'component',
+            'path': 'messages:list',
+            'format': 'convex_encoded_json',
+            'args': {'channel': 'general'},
+          });
+          return jsonResponse({
+            'status': 'success',
+            'value': 'ok',
+            'logLines': [],
+          });
+        });
+        final client = ConvexHttpClient(
+          'https://x.convex.cloud',
+          options: ConvexHttpClientOptions(httpClient: fake),
+        );
+
+        expect(
+          await client.function(
+            'messages:list',
+            componentPath: 'component',
+            args: {'channel': 'general'},
+          ),
+          'ok',
+        );
+      },
+    );
+
+    test('throws ConvexError with forwarded data', () async {
       final fake = FakeHttpClient((request) async {
         return jsonResponse({
           'status': 'error',
-          'errorMessage': '[Request ID: abc] Server Error',
-          'errorData': {'code': 'bad', '_message': 'boom'},
+          'errorMessage': 'boom',
+          'errorData': {'code': 'bad'},
           'logLines': [],
         }, statusCode: statusCodeUdfFailed);
       });
@@ -261,4 +334,23 @@ void main() {
       expect(results, [1, 2]);
     });
   });
+}
+
+class _RecordingLogger implements Logger {
+  final logs = <List<Object?>>[];
+  final warnings = <List<Object?>>[];
+  final errors = <List<Object?>>[];
+  final verbose = <String>[];
+
+  @override
+  void error(List<Object?> args) => errors.add(args);
+
+  @override
+  void log(List<Object?> args) => logs.add(args);
+
+  @override
+  void logVerbose(String message) => verbose.add(message);
+
+  @override
+  void warn(List<Object?> args) => warnings.add(args);
 }

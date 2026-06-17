@@ -181,11 +181,11 @@ class ConvexHttpClient {
   }) async {
     final encodedArgs = convexToJson(args);
     final body = jsonEncode({
-      if (componentPath != null) 'componentPath': componentPath,
+      'componentPath': ?componentPath,
       'path': path,
       'format': 'convex_encoded_json',
       'args': wrapArgsInArray ? [encodedArgs] : encodedArgs,
-      if (timestamp != null) 'ts': timestamp,
+      'ts': ?timestamp,
     });
     final response = await _client.post(
       Uri.parse('$_address/api/$endpoint'),

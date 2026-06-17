@@ -22,7 +22,7 @@ void main() {
     test('validateDeploymentUrl accepts convex and localhost hosts', () {
       for (final url in [
         'https://happy-animal-123.convex.cloud',
-        'https://app.convex.site',
+        'https://custom.example.com',
         'http://localhost:3210',
         'http://127.0.0.1:3210',
       ]) {
@@ -33,7 +33,7 @@ void main() {
     test('validateDeploymentUrl rejects invalid hosts and schemes', () {
       for (final url in [
         'ftp://example.com',
-        'https://example.com',
+        'https://app.convex.site',
         'not-a-url',
         '',
       ]) {

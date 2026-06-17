@@ -3,10 +3,10 @@ library;
 
 import 'dart:convert';
 
+import 'package:convex_dart_cli/credentials.dart';
+import 'package:convex_dart_cli/function_spec.dart';
 import 'package:test/test.dart';
 
-import '../../lib/credentials.dart';
-import '../../lib/function_spec.dart';
 import 'helpers.dart';
 
 void main() {

@@ -1,8 +1,7 @@
 import 'dart:io';
 
+import 'package:convex_dart_cli/env.dart';
 import 'package:dotenv/dotenv.dart';
-
-import '../../lib/env.dart';
 
 ({String deployKey, String url})? integrationDeployCredentials() {
   final deployKey = Platform.environment[convexDeployKeyEnvVar];

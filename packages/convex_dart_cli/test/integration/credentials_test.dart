@@ -1,9 +1,9 @@
 @Tags(['integration'])
 library;
 
+import 'package:convex_dart_cli/credentials.dart';
 import 'package:test/test.dart';
 
-import '../../lib/credentials.dart';
 import 'helpers.dart';
 
 void main() {

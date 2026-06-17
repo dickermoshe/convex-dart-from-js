@@ -72,7 +72,7 @@ void main() {
     test(
       'setAuth enables auth-required query',
       () async {
-        final token = requireEnv('CONVEX_AUTH_TOKEN');
+        final token = requireEnv('CONVEX_AUTH_TOKEN').trim();
 
         final client = ConvexClient(
           url,

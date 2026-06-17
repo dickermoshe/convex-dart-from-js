@@ -1,8 +1,7 @@
 import 'package:dotenv/dotenv.dart';
-
-import '../lib/big_brain.dart';
-import '../lib/credentials.dart';
-import '../lib/env.dart';
+import 'package:convex_dart_cli/big_brain.dart';
+import 'package:convex_dart_cli/credentials.dart';
+import 'package:convex_dart_cli/env.dart';
 import 'package:test/test.dart';
 
 class FakeBigBrainClient extends BigBrainClient {
