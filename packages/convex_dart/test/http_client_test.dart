@@ -136,6 +136,25 @@ void main() {
       expect(authHeader, isNull);
     });
 
+    test('setAuth trims surrounding whitespace', () async {
+      String? authHeader;
+      final fake = FakeHttpClient((request) async {
+        authHeader = request.headers['Authorization'];
+        return jsonResponse({
+          'status': 'success',
+          'value': null,
+          'logLines': [],
+        });
+      });
+      final client = ConvexHttpClient(
+        'https://x.convex.cloud',
+        options: ConvexHttpClientOptions(httpClient: fake),
+      );
+      client.setAuth(' token-1\n');
+      await client.query('q');
+      expect(authHeader, 'Bearer token-1');
+    });
+
     test('setAdminAuth uses Convex authorization scheme', () async {
       String? authHeader;
       final fake = FakeHttpClient((request) async {
@@ -170,6 +189,30 @@ void main() {
           'status': 'error',
           'errorMessage': 'boom',
           'errorData': {'code': 'bad'},
+          'logLines': [],
+        }, statusCode: statusCodeUdfFailed);
+      });
+      final client = ConvexHttpClient(
+        'https://x.convex.cloud',
+        options: ConvexHttpClientOptions(httpClient: fake),
+      );
+
+      await expectLater(
+        client.query('broken'),
+        throwsA(
+          isA<ConvexError<Object?>>()
+              .having((e) => e.message, 'message', 'boom')
+              .having((e) => e.data, 'data', {'code': 'bad'}),
+        ),
+      );
+    });
+
+    test('uses forwarded data message when present', () async {
+      final fake = FakeHttpClient((request) async {
+        return jsonResponse({
+          'status': 'error',
+          'errorMessage': '[Request ID: abc] Server Error',
+          'errorData': {'code': 'bad', '_message': 'boom'},
           'logLines': [],
         }, statusCode: statusCodeUdfFailed);
       });

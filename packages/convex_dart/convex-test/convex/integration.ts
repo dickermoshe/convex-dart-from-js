@@ -12,7 +12,7 @@ export const types = query({
   returns: v.any(),
   handler: async () => ({
     int64: 42n,
-    bytes: new Uint8Array([1, 2, 3]),
+    bytes: new Uint8Array([1, 2, 3]).buffer,
     nested: { a: "x" },
   }),
 });
@@ -57,7 +57,7 @@ export const throws = query({
   args: {},
   returns: v.null(),
   handler: async () => {
-    throw new ConvexError({ code: "test" }, "integration error");
+    throw new ConvexError({ code: "test", _message: "integration error" });
   },
 });
 

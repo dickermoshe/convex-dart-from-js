@@ -12,6 +12,7 @@ const statusCodeOk = 200;
 const statusCodeBadRequest = 400;
 const statusCodeUdfFailed = 560;
 const convexClientVersion = 'npm-1.41.0';
+const _convexErrorMessageField = '_message';
 
 class HttpMutationOptions {
   const HttpMutationOptions({this.skipQueue = false});
@@ -58,16 +59,17 @@ class ConvexHttpClient {
 
   void setAuth(String value) {
     clearAuth();
-    _auth = value;
+    _auth = value.trim();
   }
 
   void setAdminAuth(String token, [Map<String, Object?>? actingAs]) {
     clearAuth();
+    final trimmedToken = token.trim();
     if (actingAs != null) {
       final encoded = base64Encode(utf8.encode(jsonEncode(actingAs)));
-      _adminAuth = '$token:$encoded';
+      _adminAuth = '$trimmedToken:$encoded';
     } else {
-      _adminAuth = token;
+      _adminAuth = trimmedToken;
     }
   }
 
@@ -153,10 +155,7 @@ class ConvexHttpClient {
       case 'error':
         final errorData = json['errorData'];
         if (errorData != null) {
-          throw ConvexError<Object?>(
-            jsonToConvex(errorData),
-            message: json['errorMessage'] as String?,
-          );
+          throw _convexError(jsonToConvex(errorData), json['errorMessage']);
         }
         throw StateError(json['errorMessage'] as String? ?? 'Convex error');
       default:
@@ -172,6 +171,20 @@ class ConvexHttpClient {
     else if (_auth != null)
       'Authorization': 'Bearer $_auth',
   };
+}
+
+ConvexError<Object?> _convexError(Object? data, Object? errorMessage) {
+  final message = errorMessage is String ? errorMessage : null;
+  if (data is Map<String, Object?> &&
+      data[_convexErrorMessageField] is String) {
+    final forwardedData = Map<String, Object?>.of(data)
+      ..remove(_convexErrorMessageField);
+    return ConvexError<Object?>(
+      forwardedData,
+      message: data[_convexErrorMessageField] as String,
+    );
+  }
+  return ConvexError<Object?>(data, message: message);
 }
 
 class _QueuedMutation {
