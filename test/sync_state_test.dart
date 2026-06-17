@@ -1,6 +1,6 @@
-import 'package:convex_dart_from_js/src/browser/logging.dart';
-import 'package:convex_dart_from_js/src/browser/sync/local_state.dart';
-import 'package:convex_dart_from_js/src/browser/sync/request_manager.dart';
+import 'package:convex_dart/src/browser/logging.dart';
+import 'package:convex_dart/src/browser/sync/local_state.dart';
+import 'package:convex_dart/src/browser/sync/request_manager.dart';
 import 'package:test/test.dart';
 
 void main() {

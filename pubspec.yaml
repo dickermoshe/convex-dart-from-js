@@ -1,6 +1,6 @@
-name: convex_dart_from_js
-description: A starting point for Dart libraries or applications.
-version: 1.0.0
+name: convex_dart
+description: Dart port of the Convex JavaScript browser client
+version: 1.41.0
 # repository: https://github.com/my_org/my_repo
 
 environment:
@@ -14,3 +14,4 @@ dependencies:
 dev_dependencies:
   lints: ^6.0.0
   test: ^1.25.6
+

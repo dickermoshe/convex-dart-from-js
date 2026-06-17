@@ -85,7 +85,8 @@ class LocalSyncState {
   }
 
   void transition(Map<String, Object?> transition) {
-    for (final raw in (transition['modifications'] as List).cast<Map>()) {
+    for (final raw
+        in (transition['modifications'] as List).cast<Map<String, Object?>>()) {
       final modification = raw.cast<String, Object?>();
       switch (modification['type']) {
         case 'QueryUpdated':

@@ -284,7 +284,7 @@ class WebSocketManager {
     if (_transitionChunkBuffer!.chunks.length == totalParts) {
       final fullJson = _transitionChunkBuffer!.chunks.join();
       _transitionChunkBuffer = null;
-      final transition = parseServerMessage(jsonDecode(fullJson));
+      final transition = parseServerMessage(jsonDecode(fullJson) as Object);
       if (transition['type'] != 'Transition') {
         throw StateError(
           'Expected Transition, got ${transition['type']} after assembling chunks',

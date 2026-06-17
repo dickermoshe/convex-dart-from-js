@@ -21,8 +21,8 @@ class RemoteQuerySet {
       );
     }
     for (final modification
-        in (transition['modifications'] as List).cast<Map>()) {
-      final mod = modification.cast<String, Object?>();
+        in (transition['modifications'] as List).cast<Map<String, Object?>>()) {
+      final mod = modification;
       switch (mod['type']) {
         case 'QueryUpdated':
           final path = queryPath(mod['queryId']! as int);

@@ -1,8 +1,8 @@
 import 'dart:convert';
 
-import 'package:convex_dart_from_js/src/browser/sync/protocol.dart';
-import 'package:convex_dart_from_js/src/browser/sync/udf_path_utils.dart';
-import 'package:convex_dart_from_js/src/common/index.dart';
+import 'package:convex_dart/src/browser/sync/protocol.dart';
+import 'package:convex_dart/src/browser/sync/udf_path_utils.dart';
+import 'package:convex_dart/src/common/index.dart';
 import 'package:test/test.dart';
 
 void main() {
@@ -32,12 +32,24 @@ void main() {
     });
   });
 
-  group('protocol', () {
+  group('protocol u64', () {
     test('round trips u64 timestamps exactly', () {
       final value = (BigInt.one << 63) + BigInt.from(5);
       expect(u64ToLong(longToU64(value)), value);
     });
 
+    test('longToU64 edge cases', () {
+      expect(u64ToLong(longToU64(BigInt.zero)), BigInt.zero);
+      expect(u64ToLong(longToU64(BigInt.one)), BigInt.one);
+      expect(
+        u64ToLong(longToU64((BigInt.one << 64) - BigInt.one)),
+        (BigInt.one << 64) - BigInt.one,
+      );
+      expect(() => longToU64(-BigInt.one), throwsArgumentError);
+    });
+  });
+
+  group('protocol client messages', () {
     test('encodes connect max observed timestamp', () {
       expect(
         encodeClientMessage({
@@ -52,12 +64,26 @@ void main() {
       );
     });
 
+    test('encodeClientMessageToJson round trips mutation', () {
+      final json = encodeClientMessageToJson({
+        'type': 'Mutation',
+        'requestId': 1,
+        'udfPath': 'send',
+        'args': [<Object?>[]],
+      });
+      final decoded = jsonDecode(json) as Map;
+      expect(decoded['type'], 'Mutation');
+      expect(decoded['requestId'], 1);
+    });
+  });
+
+  group('protocol server messages', () {
     test('decodes transition versions', () {
       final decoded = parseServerMessage({
         'type': 'Transition',
         'startVersion': {'querySet': 0, 'ts': 'AAAAAAAAAAA=', 'identity': 0},
         'endVersion': {'querySet': 1, 'ts': 'AQAAAAAAAAA=', 'identity': 0},
-        'modifications': [],
+        'modifications': <Object?>[],
       });
       expect((decoded['startVersion'] as Map)['ts'], BigInt.zero);
       expect((decoded['endVersion'] as Map)['ts'], BigInt.one);
@@ -71,10 +97,22 @@ void main() {
           'success': true,
           'result': null,
           'ts': 'AQAAAAAAAAA=',
-          'logLines': [],
+          'logLines': <Object?>[],
         }),
       );
       expect(decoded['ts'], BigInt.one);
+    });
+
+    test('passes through AuthError and Ping', () {
+      expect(parseServerMessage({'type': 'AuthError'})['type'], 'AuthError');
+      expect(parseServerMessage({'type': 'Ping'})['type'], 'Ping');
+    });
+
+    test('throws on unknown server message type', () {
+      expect(
+        () => parseServerMessage({'type': 'Unknown'}),
+        throwsFormatException,
+      );
     });
   });
 
@@ -90,6 +128,16 @@ void main() {
         serializePathAndArgs('messages.js:list', {'n': BigInt.one}),
         '{"udfPath":"messages:list","args":{"n":{"\$integer":"AQAAAAAAAAA="}}}',
       );
+    });
+
+    test('serializes paginated query tokens', () {
+      final token = serializePaginatedPathAndArgs(
+        'messages:list',
+        {},
+        initialNumItems: 10,
+        id: 1,
+      );
+      expect(token, contains('"type":"paginated"'));
     });
   });
 }

@@ -1,6 +1,6 @@
 import 'dart:typed_data';
 
-import 'package:convex_dart_from_js/convex_dart_from_js.dart';
+import 'package:convex_dart/browser.dart';
 import 'package:test/test.dart';
 
 void main() {
@@ -46,8 +46,14 @@ void main() {
       expect(() => jsonToConvex({r'$bytes': 1}), throwsFormatException);
       expect(() => jsonToConvex({r'$integer': 'AQID'}), throwsFormatException);
       expect(() => jsonToConvex({r'$float': 'AQID'}), throwsFormatException);
-      expect(() => jsonToConvex({r'$set': []}), throwsUnsupportedError);
-      expect(() => jsonToConvex({r'$map': []}), throwsUnsupportedError);
+      expect(
+        () => jsonToConvex({r'$set': <Object?>[]}),
+        throwsUnsupportedError,
+      );
+      expect(
+        () => jsonToConvex({r'$map': <Object?>[]}),
+        throwsUnsupportedError,
+      );
     });
   });
 

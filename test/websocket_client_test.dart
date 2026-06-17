@@ -1,44 +1,36 @@
-import 'dart:convert';
-
-import 'package:convex_dart_from_js/convex_dart_from_js.dart';
-import 'package:convex_dart_from_js/src/browser/sync/web_socket_manager.dart';
+import 'package:convex_dart/browser.dart';
 import 'package:test/test.dart';
+
+import 'support/fake_socket.dart';
+import 'support/transition_fixtures.dart';
 
 void main() {
   group('BaseConvexClient', () {
     test('sends connect and query set on open, then applies transition', () {
-      late _FakeSocket socket;
+      late FakeSocket socket;
       final updated = <List<QueryToken>>[];
       final client = BaseConvexClient(
         'https://x.convex.cloud',
         (queries) => updated.add(queries),
         options: BaseConvexClientOptions(
-          webSocketFactory: (_) => socket = _FakeSocket(),
+          webSocketFactory: (_) => socket = FakeSocket(),
         ),
       );
       final sub = client.subscribe('messages.js:list', {'n': BigInt.one});
 
       socket.open();
-      expect(_sentTypes(socket), ['Connect', 'ModifyQuerySet']);
-      final add = _sent(socket, 1);
+      expect(sentMessageTypes(socket.sent), ['Connect', 'ModifyQuerySet']);
+      final add = sentMessage(socket.sent, 1);
       expect(
         ((add['modifications'] as List).single as Map)['udfPath'],
         'messages:list',
       );
 
       socket.message(
-        _transitionJson(
+        transitionJson(
           startQuerySet: 0,
           endQuerySet: 1,
-          modifications: [
-            {
-              'type': 'QueryUpdated',
-              'queryId': 0,
-              'value': 'hello',
-              'logLines': [],
-              'journal': null,
-            },
-          ],
+          modifications: [queryUpdated(queryId: 0, value: 'hello')],
         ),
       );
 
@@ -49,37 +41,37 @@ void main() {
     test(
       'mutation resolves after transition reaches mutation timestamp',
       () async {
-        late _FakeSocket socket;
+        late FakeSocket socket;
         final client = BaseConvexClient(
           'https://x.convex.cloud',
           (_) {},
           options: BaseConvexClientOptions(
-            webSocketFactory: (_) => socket = _FakeSocket(),
+            webSocketFactory: (_) => socket = FakeSocket(),
           ),
         );
         socket.open();
         socket.message(
-          _transitionJson(startQuerySet: 0, endQuerySet: 1, modifications: []),
+          transitionJson(startQuerySet: 0, endQuerySet: 1, modifications: []),
         );
         final mutation = client.mutation('send', {'body': 'hi'});
-        final mutationMessage = _sent(socket, socket.sent.length - 1);
+        final mutationMessage = sentMessage(
+          socket.sent,
+          socket.sent.length - 1,
+        );
         expect(mutationMessage['type'], 'Mutation');
 
         socket.message(
-          jsonEncode({
-            'type': 'MutationResponse',
-            'requestId': mutationMessage['requestId'],
-            'success': true,
-            'result': 'ok',
-            'ts': 'AQAAAAAAAAA=',
-            'logLines': [],
-          }),
+          mutationResponseJson(
+            requestId: mutationMessage['requestId']! as int,
+            success: true,
+            result: 'ok',
+          ),
         );
         await Future<void>.delayed(Duration.zero);
         expect(client.connectionState().hasInflightRequests, isTrue);
 
         socket.message(
-          _transitionJson(
+          transitionJson(
             startQuerySet: 1,
             endQuerySet: 1,
             startTs: 'AAAAAAAAAAA=',
@@ -93,30 +85,22 @@ void main() {
     );
 
     test('optimistic update changes local subscribed query immediately', () {
-      late _FakeSocket socket;
+      late FakeSocket socket;
       final updated = <List<QueryToken>>[];
       final client = BaseConvexClient(
         'https://x.convex.cloud',
         (queries) => updated.add(queries),
         options: BaseConvexClientOptions(
-          webSocketFactory: (_) => socket = _FakeSocket(),
+          webSocketFactory: (_) => socket = FakeSocket(),
         ),
       );
       final sub = client.subscribe('messages:list', {});
       socket.open();
       socket.message(
-        _transitionJson(
+        transitionJson(
           startQuerySet: 0,
           endQuerySet: 1,
-          modifications: [
-            {
-              'type': 'QueryUpdated',
-              'queryId': 0,
-              'value': [],
-              'logLines': [],
-              'journal': null,
-            },
-          ],
+          modifications: [queryUpdated(queryId: 0, value: [])],
         ),
       );
 
@@ -135,48 +119,105 @@ void main() {
       expect(client.localQueryResultByToken(sub.queryToken), ['hi']);
       expect(updated.last, [sub.queryToken]);
     });
+
+    test('action resolves on ActionResponse', () async {
+      late FakeSocket socket;
+      final client = BaseConvexClient(
+        'https://x.convex.cloud',
+        (_) {},
+        options: BaseConvexClientOptions(
+          webSocketFactory: (_) => socket = FakeSocket(),
+        ),
+      );
+      socket.open();
+      socket.message(
+        transitionJson(startQuerySet: 0, endQuerySet: 1, modifications: []),
+      );
+      final actionFuture = client.action('doThing', {'x': 1.0});
+      final actionMessage = sentMessage(socket.sent, socket.sent.length - 1);
+      expect(actionMessage['type'], 'Action');
+      socket.message(
+        actionResponseJson(
+          requestId: actionMessage['requestId']! as int,
+          success: true,
+          result: 'done',
+        ),
+      );
+      expect(await actionFuture, 'done');
+    });
+
+    test('QueryFailed surfaces error to local query result', () {
+      late FakeSocket socket;
+      final client = BaseConvexClient(
+        'https://x.convex.cloud',
+        (_) {},
+        options: BaseConvexClientOptions(
+          webSocketFactory: (_) => socket = FakeSocket(),
+        ),
+      );
+      final sub = client.subscribe('broken:list', {});
+      socket.open();
+      socket.message(
+        transitionJson(
+          startQuerySet: 0,
+          endQuerySet: 1,
+          modifications: [
+            queryFailed(queryId: 0, errorMessage: 'query failed'),
+          ],
+        ),
+      );
+      expect(
+        () => client.localQueryResultByToken(sub.queryToken),
+        throwsA(isA<ConvexError<Object?>>()),
+      );
+    });
+
+    test('setAuth sends Authenticate message', () async {
+      late FakeSocket socket;
+      final client = BaseConvexClient(
+        'https://x.convex.cloud',
+        (_) {},
+        options: BaseConvexClientOptions(
+          webSocketFactory: (_) => socket = FakeSocket(),
+        ),
+      );
+      socket.open();
+      await client.setAuth((_) async => 'token', (_) {});
+      expect(sentMessageTypes(socket.sent), contains('Authenticate'));
+      expect(client.hasAuth(), isTrue);
+      client.clearAuth();
+      expect(client.hasAuth(), isFalse);
+    });
+
+    test('subscribeToConnectionState notifies on changes', () async {
+      late FakeSocket socket;
+      final states = <ConnectionState>[];
+      final client = BaseConvexClient(
+        'https://x.convex.cloud',
+        (_) {},
+        options: BaseConvexClientOptions(
+          webSocketFactory: (_) => socket = FakeSocket(),
+        ),
+      );
+      client.subscribeToConnectionState(states.add);
+      socket.open();
+      await Future<void>.delayed(Duration.zero);
+      expect(states, isNotEmpty);
+      expect(states.last.isWebSocketConnected, isTrue);
+    });
+
+    test('close terminates client', () async {
+      late FakeSocket socket;
+      final client = BaseConvexClient(
+        'https://x.convex.cloud',
+        (_) {},
+        options: BaseConvexClientOptions(
+          webSocketFactory: (_) => socket = FakeSocket(),
+        ),
+      );
+      socket.open();
+      await client.close();
+      expect(client.connectionState().isWebSocketConnected, isFalse);
+    });
   });
-}
-
-List<String> _sentTypes(_FakeSocket socket) => socket.sent
-    .map((raw) => (jsonDecode(raw) as Map)['type'] as String)
-    .toList();
-
-Map<String, Object?> _sent(_FakeSocket socket, int index) =>
-    (jsonDecode(socket.sent[index]) as Map).cast<String, Object?>();
-
-String _transitionJson({
-  required int startQuerySet,
-  required int endQuerySet,
-  String startTs = 'AAAAAAAAAAA=',
-  String endTs = 'AAAAAAAAAAA=',
-  required List<Map<String, Object?>> modifications,
-}) => jsonEncode({
-  'type': 'Transition',
-  'startVersion': {'querySet': startQuerySet, 'ts': startTs, 'identity': 0},
-  'endVersion': {'querySet': endQuerySet, 'ts': endTs, 'identity': 0},
-  'modifications': modifications,
-});
-
-class _FakeSocket implements SyncWebSocket {
-  final sent = <String>[];
-  @override
-  void Function(int code, String reason)? onClose;
-  @override
-  void Function(Object error)? onError;
-  @override
-  void Function(Object? data)? onMessage;
-  @override
-  void Function()? onOpen;
-
-  void open() => onOpen?.call();
-  void message(String data) => onMessage?.call(data);
-
-  @override
-  void close() {}
-
-  @override
-  void send(String message) {
-    sent.add(message);
-  }
 }
