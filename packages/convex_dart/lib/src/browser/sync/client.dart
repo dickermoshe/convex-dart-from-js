@@ -216,6 +216,11 @@ class BaseConvexClient {
     _webSocketManager.sendMessage(message);
   }
 
+  void setAdminAuth(String value, [Map<String, Object?>? actingAs]) {
+    final message = _state.setAdminAuth(value, actingAs);
+    _webSocketManager.sendMessage(message);
+  }
+
   ({QueryToken queryToken, void Function() unsubscribe}) subscribe(
     String name, [
     Map<String, Object?>? args,

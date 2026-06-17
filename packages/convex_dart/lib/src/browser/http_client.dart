@@ -48,6 +48,7 @@ class ConvexHttpClient {
   final http.Client _client;
   final Logger _logger;
   String? _auth;
+  String? _adminAuth;
   final bool _debug = true;
   final List<_QueuedMutation> _mutationQueue = [];
   bool _isProcessingQueue = false;
@@ -60,8 +61,19 @@ class ConvexHttpClient {
     _auth = value;
   }
 
+  void setAdminAuth(String token, [Map<String, Object?>? actingAs]) {
+    clearAuth();
+    if (actingAs != null) {
+      final encoded = base64Encode(utf8.encode(jsonEncode(actingAs)));
+      _adminAuth = '$token:$encoded';
+    } else {
+      _adminAuth = token;
+    }
+  }
+
   void clearAuth() {
     _auth = null;
+    _adminAuth = null;
   }
 
   Future<Object?> query(String path, [Map<String, Object?>? args]) async =>
@@ -155,7 +167,10 @@ class ConvexHttpClient {
   Map<String, String> _headers() => {
     'Content-Type': 'application/json',
     'Convex-Client': convexClientVersion,
-    if (_auth != null) 'Authorization': 'Bearer $_auth',
+    if (_adminAuth != null)
+      'Authorization': 'Convex $_adminAuth'
+    else if (_auth != null)
+      'Authorization': 'Bearer $_auth',
   };
 }
 

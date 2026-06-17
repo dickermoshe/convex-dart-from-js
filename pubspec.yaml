@@ -6,3 +6,5 @@ environment:
 
 workspace:
   - packages/convex_dart
+  - packages/convex_dart_cli
+

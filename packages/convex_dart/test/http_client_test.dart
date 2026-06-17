@@ -136,6 +136,25 @@ void main() {
       expect(authHeader, isNull);
     });
 
+    test('setAdminAuth uses Convex authorization scheme', () async {
+      String? authHeader;
+      final fake = FakeHttpClient((request) async {
+        authHeader = request.headers['Authorization'];
+        return jsonResponse({
+          'status': 'success',
+          'value': null,
+          'logLines': [],
+        });
+      });
+      final client = ConvexHttpClient(
+        'https://x.convex.cloud',
+        options: ConvexHttpClientOptions(httpClient: fake),
+      );
+      client.setAdminAuth('admin-key');
+      await client.query('q');
+      expect(authHeader, 'Convex admin-key');
+    });
+
     test('close closes underlying http client', () {
       final fake = FakeHttpClient((_) async => http.Response('', 200));
       final client = ConvexHttpClient(
