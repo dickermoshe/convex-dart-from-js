@@ -37,6 +37,8 @@ jobs:
         working-directory: packages/convex_dart/convex-test
         run: |
           npm ci
+          node scripts/generate-integration-keys.mjs
+          echo "CONVEX_AUTH_TOKEN=$(node scripts/sign-integration-jwt.mjs)" >> "$GITHUB_ENV"
           npx convex deploy
 
       - run: dart test packages/convex_dart/test/integration/

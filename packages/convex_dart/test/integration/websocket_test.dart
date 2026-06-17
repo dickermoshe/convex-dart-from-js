@@ -72,7 +72,7 @@ void main() {
     test(
       'setAuth enables auth-required query',
       () async {
-        final token = requireEnv('CONVEX_AUTH_TOKEN').trim();
+        final token = requireJwtEnv('CONVEX_AUTH_TOKEN');
 
         final client = ConvexClient(
           url,
@@ -116,7 +116,7 @@ void main() {
         handle.unsubscribe();
         client.clearAuth();
       },
-      skip: optionalEnv('CONVEX_AUTH_TOKEN') == null,
+      skip: optionalJwtEnv('CONVEX_AUTH_TOKEN') == null,
     );
   });
 }

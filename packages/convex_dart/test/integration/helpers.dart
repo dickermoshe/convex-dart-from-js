@@ -1,5 +1,24 @@
 import 'dart:io';
 
+String? optionalJwtEnv(String name) {
+  final value = optionalEnv(name)?.trim();
+  if (value == null) return null;
+  final token = value.startsWith('Bearer ') ? value.substring(7).trim() : value;
+  if (!_looksLikeJwt(token)) return null;
+  return token;
+}
+
+String requireJwtEnv(String name) {
+  final token = optionalJwtEnv(name);
+  if (token == null) {
+    throw StateError(
+      'Missing valid JWT in $name for integration tests. '
+      'Expected three base64url-encoded parts separated by dots.',
+    );
+  }
+  return token;
+}
+
 String requireEnv(String name) {
   final value = Platform.environment[name];
   if (value == null || value.isEmpty) {
@@ -8,6 +27,15 @@ String requireEnv(String name) {
     );
   }
   return value;
+}
+
+bool _looksLikeJwt(String value) {
+  final parts = value.split('.');
+  if (parts.length != 3 || parts.any((part) => part.isEmpty)) {
+    return false;
+  }
+  final base64UrlPattern = RegExp(r'^[A-Za-z0-9_-]+$');
+  return parts.every((part) => base64UrlPattern.hasMatch(part));
 }
 
 String? optionalEnv(String name) {

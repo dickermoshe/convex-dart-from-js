@@ -1,4 +1,11 @@
 Minimal Convex deployment used by `test/integration/` in the parent package and in `convex_dart_cli`.
 
-Set `CONVEX_AUTH_TOKEN` to a JWT signed for the custom provider in `convex/auth.config.ts`
-when running auth integration tests locally or in CI.
+To run auth integration tests locally, generate a matching custom JWT provider keypair and token:
+
+```sh
+node scripts/generate-integration-keys.mjs
+export CONVEX_AUTH_TOKEN="$(node scripts/sign-integration-jwt.mjs)"
+npx convex dev --once
+```
+
+CI runs the same scripts before deploying the integration backend.
