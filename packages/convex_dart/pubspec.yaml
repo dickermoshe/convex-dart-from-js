@@ -1,6 +1,7 @@
 name: convex_dart
 description: Dart port of the Convex JavaScript browser client
 version: 1.41.0
+resolution: workspace
 # repository: https://github.com/my_org/my_repo
 
 environment:

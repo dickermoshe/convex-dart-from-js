@@ -1,0 +1,8 @@
+name: convex_dart_workspace
+publish_to: none
+
+environment:
+  sdk: ^3.10.7
+
+workspace:
+  - packages/convex_dart

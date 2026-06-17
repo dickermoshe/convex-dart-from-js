@@ -16,13 +16,7 @@ jobs:
       - run: dart pub get
       - run: dart format --set-exit-if-changed .
       - run: dart analyze
-      - run: dart test --exclude-tags integration --coverage=coverage
-      - run: dart pub global activate coverage
-      - run: dart pub global run coverage:format_coverage --lcov --in=coverage --out=coverage/lcov.info --report-on=lib
-      - uses: actions/upload-artifact@v4
-        with:
-          name: coverage
-          path: coverage/lcov.info
+      - run: dart test --exclude-tags integration packages/convex_dart/test
 
   integration:
     runs-on: ubuntu-latest
@@ -34,7 +28,7 @@ jobs:
           sdk: stable
       - run: dart pub get
       - name: Deploy integration test backend
-        working-directory: convex-test
+        working-directory: packages/convex_dart/convex-test
         env:
           CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_DEPLOY_KEY }}
         run: |
@@ -44,4 +38,4 @@ jobs:
         env:
           CONVEX_URL: ${{ secrets.CONVEX_URL }}
           CONVEX_AUTH_TOKEN: ${{ secrets.CONVEX_AUTH_TOKEN }}
-        run: dart test test/integration/
+        run: dart test packages/convex_dart/test/integration/
