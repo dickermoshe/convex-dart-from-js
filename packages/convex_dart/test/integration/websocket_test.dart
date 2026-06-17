@@ -69,40 +69,54 @@ void main() {
       handle.unsubscribe();
     });
 
-    test('setAuth enables auth-required query', () async {
-      final token = Platform.environment['CONVEX_AUTH_TOKEN'];
-      if (token == null || token.isEmpty) {
-        return;
-      }
+    test(
+      'setAuth enables auth-required query',
+      () async {
+        final token = requireEnv('CONVEX_AUTH_TOKEN');
 
-      final client = ConvexClient(url);
-      addTearDown(() => client.close());
+        final client = ConvexClient(
+          url,
+          options: const ConvexClientOptions(expectAuth: true),
+        );
+        addTearDown(() => client.close());
 
-      final authCompleter = Completer<bool>();
-      await client.setAuth((_) async => token, (isAuthenticated) {
-        if (!authCompleter.isCompleted) {
-          authCompleter.complete(isAuthenticated);
-        }
-      });
-      await retry(
-        () => authCompleter.future.timeout(const Duration(seconds: 30)),
-      );
+        final authCompleter = Completer<bool>();
+        await client.setAuth((_) async => token, (isAuthenticated) {
+          if (!authCompleter.isCompleted) {
+            authCompleter.complete(isAuthenticated);
+          }
+        });
 
-      final queryCompleter = Completer<String>();
-      late Unsubscribe<String> handle;
-      handle = client.onUpdate<String>('integration:authRequired', {}, () {
-        final value = handle.getCurrentValue();
-        if (value != null && !queryCompleter.isCompleted) {
-          queryCompleter.complete(value);
-        }
-      });
+        final authenticated = await retry(
+          () => authCompleter.future.timeout(const Duration(seconds: 30)),
+        );
+        expect(
+          authenticated,
+          isTrue,
+          reason: 'setAuth onChange never confirmed',
+        );
 
-      final identity = await retry(
-        () => queryCompleter.future.timeout(const Duration(seconds: 30)),
-      );
-      expect(identity.isNotEmpty, isTrue);
-      handle.unsubscribe();
-      client.clearAuth();
-    });
+        final queryCompleter = Completer<String>();
+        late Unsubscribe<String> handle;
+        handle = client.onUpdate<String>('integration:authRequired', {}, () {
+          try {
+            final value = handle.getCurrentValue();
+            if (value != null && !queryCompleter.isCompleted) {
+              queryCompleter.complete(value);
+            }
+          } on Object {
+            // Query may fail before auth propagates; wait for a successful value.
+          }
+        });
+
+        final identity = await retry(
+          () => queryCompleter.future.timeout(const Duration(seconds: 30)),
+        );
+        expect(identity.isNotEmpty, isTrue);
+        handle.unsubscribe();
+        client.clearAuth();
+      },
+      skip: optionalEnv('CONVEX_AUTH_TOKEN') == null,
+    );
   });
 }

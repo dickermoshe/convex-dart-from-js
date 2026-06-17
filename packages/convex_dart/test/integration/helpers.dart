@@ -10,6 +10,14 @@ String requireEnv(String name) {
   return value;
 }
 
+String? optionalEnv(String name) {
+  final value = Platform.environment[name];
+  if (value == null || value.isEmpty) {
+    return null;
+  }
+  return value;
+}
+
 Future<T> retry<T>(
   Future<T> Function() fn, {
   int maxAttempts = 3,

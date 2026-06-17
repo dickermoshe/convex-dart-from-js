@@ -70,21 +70,22 @@ void main() {
       );
     });
 
-    test('auth required query with token', () async {
-      final token = Platform.environment['CONVEX_AUTH_TOKEN'];
-      if (token == null || token.isEmpty) {
-        return;
-      }
-      final authed = ConvexHttpClient(
-        url,
-        options: ConvexHttpClientOptions(auth: token),
-      );
-      addTearDown(authed.close);
-      final result = await retry(
-        () => authed.query('integration:authRequired'),
-      );
-      expect(result, isA<String>());
-      expect((result as String).isNotEmpty, isTrue);
-    });
+    test(
+      'auth required query with token',
+      () async {
+        final token = requireEnv('CONVEX_AUTH_TOKEN');
+        final authed = ConvexHttpClient(
+          url,
+          options: ConvexHttpClientOptions(auth: token),
+        );
+        addTearDown(authed.close);
+        final result = await retry(
+          () => authed.query('integration:authRequired'),
+        );
+        expect(result, isA<String>());
+        expect((result as String).isNotEmpty, isTrue);
+      },
+      skip: optionalEnv('CONVEX_AUTH_TOKEN') == null,
+    );
   });
 }

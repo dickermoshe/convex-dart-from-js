@@ -12,7 +12,6 @@ const statusCodeOk = 200;
 const statusCodeBadRequest = 400;
 const statusCodeUdfFailed = 560;
 const convexClientVersion = 'npm-1.41.0';
-const _convexErrorMessageField = '_message';
 
 class HttpMutationOptions {
   const HttpMutationOptions({this.skipQueue = false});
@@ -50,7 +49,8 @@ class ConvexHttpClient {
   final Logger _logger;
   String? _auth;
   String? _adminAuth;
-  final bool _debug = true;
+  Future<String>? _encodedTsFuture;
+  bool _debug = true;
   final List<_QueuedMutation> _mutationQueue = [];
   bool _isProcessingQueue = false;
 
@@ -59,23 +59,40 @@ class ConvexHttpClient {
 
   void setAuth(String value) {
     clearAuth();
-    _auth = value.trim();
+    _auth = value;
   }
 
   void setAdminAuth(String token, [Map<String, Object?>? actingAs]) {
     clearAuth();
-    final trimmedToken = token.trim();
     if (actingAs != null) {
       final encoded = base64Encode(utf8.encode(jsonEncode(actingAs)));
-      _adminAuth = '$trimmedToken:$encoded';
+      _adminAuth = '$token:$encoded';
     } else {
-      _adminAuth = trimmedToken;
+      _adminAuth = token;
     }
   }
 
   void clearAuth() {
     _auth = null;
     _adminAuth = null;
+  }
+
+  void setDebug(bool debug) {
+    _debug = debug;
+  }
+
+  Future<Object?> consistentQuery(
+    String path, [
+    Map<String, Object?>? args,
+  ]) async {
+    final timestamp = await _getTimestamp();
+    return _run(
+      'query',
+      path,
+      parseArgs(args),
+      endpoint: 'query_at_ts',
+      timestamp: timestamp,
+    );
   }
 
   Future<Object?> query(String path, [Map<String, Object?>? args]) async =>
@@ -99,7 +116,38 @@ class ConvexHttpClient {
   Future<Object?> action(String path, [Map<String, Object?>? args]) async =>
       _run('action', path, parseArgs(args), endpoint: 'action');
 
+  Future<Object?> function(
+    String path, {
+    String? componentPath,
+    Map<String, Object?>? args,
+  }) async => _run(
+    'any',
+    path,
+    parseArgs(args),
+    endpoint: 'function',
+    componentPath: componentPath,
+    wrapArgsInArray: false,
+  );
+
   void close() => _client.close();
+
+  Future<String> _getTimestamp() {
+    final existing = _encodedTsFuture;
+    if (existing != null) return existing;
+    return _encodedTsFuture = _getTimestampInner();
+  }
+
+  Future<String> _getTimestampInner() async {
+    final response = await _client.post(
+      Uri.parse('$_address/api/query_ts'),
+      headers: _baseHeaders(),
+    );
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw StateError(response.body);
+    }
+    final json = jsonDecode(response.body) as Map<String, Object?>;
+    return json['ts']! as String;
+  }
 
   Future<void> _processMutationQueue() async {
     if (_isProcessingQueue) return;
@@ -127,11 +175,17 @@ class ConvexHttpClient {
     String path,
     Map<String, Object?> args, {
     required String endpoint,
+    String? timestamp,
+    String? componentPath,
+    bool wrapArgsInArray = true,
   }) async {
+    final encodedArgs = convexToJson(args);
     final body = jsonEncode({
+      if (componentPath != null) 'componentPath': componentPath,
       'path': path,
       'format': 'convex_encoded_json',
-      'args': [convexToJson(args)],
+      'args': wrapArgsInArray ? [encodedArgs] : encodedArgs,
+      if (timestamp != null) 'ts': timestamp,
     });
     final response = await _client.post(
       Uri.parse('$_address/api/$endpoint'),
@@ -155,7 +209,10 @@ class ConvexHttpClient {
       case 'error':
         final errorData = json['errorData'];
         if (errorData != null) {
-          throw _convexError(jsonToConvex(errorData), json['errorMessage']);
+          throw ConvexError<Object?>(
+            jsonToConvex(errorData),
+            message: json['errorMessage'] as String?,
+          );
         }
         throw StateError(json['errorMessage'] as String? ?? 'Convex error');
       default:
@@ -163,28 +220,18 @@ class ConvexHttpClient {
     }
   }
 
-  Map<String, String> _headers() => {
+  Map<String, String> _baseHeaders() => {
     'Content-Type': 'application/json',
     'Convex-Client': convexClientVersion,
+  };
+
+  Map<String, String> _headers() => {
+    ..._baseHeaders(),
     if (_adminAuth != null)
       'Authorization': 'Convex $_adminAuth'
     else if (_auth != null)
       'Authorization': 'Bearer $_auth',
   };
-}
-
-ConvexError<Object?> _convexError(Object? data, Object? errorMessage) {
-  final message = errorMessage is String ? errorMessage : null;
-  if (data is Map<String, Object?> &&
-      data[_convexErrorMessageField] is String) {
-    final forwardedData = Map<String, Object?>.of(data)
-      ..remove(_convexErrorMessageField);
-    return ConvexError<Object?>(
-      forwardedData,
-      message: data[_convexErrorMessageField] as String,
-    );
-  }
-  return ConvexError<Object?>(data, message: message);
 }
 
 class _QueuedMutation {
