@@ -1,5 +1,5 @@
 @Tags(['integration'])
-library integration_http;
+library;
 
 import 'dart:io';
 

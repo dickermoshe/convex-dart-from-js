@@ -1,5 +1,5 @@
 @Tags(['integration'])
-library integration_websocket;
+library;
 
 import 'dart:async';
 import 'dart:io';

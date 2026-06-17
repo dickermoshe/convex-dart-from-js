@@ -43,7 +43,7 @@ Map<String, Object?> queryFailed({
   'queryId': queryId,
   'errorMessage': errorMessage,
   'logLines': logLines,
-  if (errorData != null) 'errorData': errorData,
+  'errorData': ?errorData,
 };
 
 Map<String, Object?> queryRemoved({required int queryId}) => {
@@ -65,7 +65,7 @@ String mutationResponseJson({
   'result': result,
   'ts': ts,
   'logLines': logLines,
-  if (errorData != null) 'errorData': errorData,
+  'errorData': ?errorData,
 });
 
 String actionResponseJson({
@@ -80,7 +80,7 @@ String actionResponseJson({
   'success': success,
   'result': result,
   'logLines': logLines,
-  if (errorData != null) 'errorData': errorData,
+  'errorData': ?errorData,
 });
 
 String authErrorJson() => jsonEncode({'type': 'AuthError'});
