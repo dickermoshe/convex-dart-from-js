@@ -1,8 +1,13 @@
-/// Support for doing something awesome.
-///
-/// More dartdocs go here.
 library;
 
-export 'src/convex_dart_from_js_base.dart';
-
-// TODO: Export any libraries intended for clients of this package.
+export 'src/browser/client.dart';
+export 'src/browser/http_client.dart';
+export 'src/common/args.dart';
+export 'src/common/deployment_url.dart';
+export 'src/values/base64.dart';
+export 'src/values/compare.dart';
+export 'src/values/errors.dart';
+export 'src/values/size.dart';
+export 'src/values/validator_builder.dart';
+export 'src/values/validators.dart';
+export 'src/values/value.dart';
