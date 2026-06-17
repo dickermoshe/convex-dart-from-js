@@ -42,10 +42,12 @@ void main() {
       final functions = spec['functions'] as List<dynamic>;
       expect(functions, isNotEmpty);
 
-      final serialized = jsonEncode(functions);
+      final identifiers = functions
+          .map((f) => (f as Map<String, dynamic>)['identifier'] as String)
+          .toList();
       expect(
-        serialized,
-        contains('integration:echo'),
+        identifiers,
+        contains('integration.js:echo'),
         reason: 'convex-test deployment should expose integration.ts',
       );
     });
