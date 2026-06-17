@@ -10,9 +10,7 @@ void main() {
   final credentials = integrationDeployCredentials();
   if (credentials == null) {
     test('requires CONVEX_DEPLOY_KEY and CONVEX_URL', () {
-      fail(
-        'Set CONVEX_DEPLOY_KEY and CONVEX_URL to run integration tests',
-      );
+      fail('Set CONVEX_DEPLOY_KEY and CONVEX_URL to run integration tests');
     });
     return;
   }

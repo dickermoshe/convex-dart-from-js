@@ -7,10 +7,7 @@ import '../../lib/env.dart';
 ({String deployKey, String url})? integrationDeployCredentials() {
   final deployKey = Platform.environment[convexDeployKeyEnvVar];
   final url = Platform.environment[convexUrlEnvVar];
-  if (deployKey == null ||
-      deployKey.isEmpty ||
-      url == null ||
-      url.isEmpty) {
+  if (deployKey == null || deployKey.isEmpty || url == null || url.isEmpty) {
     return null;
   }
   return (deployKey: deployKey, url: url);
@@ -18,10 +15,7 @@ import '../../lib/env.dart';
 
 DotEnv deployKeyEnv(String deployKey, String url) {
   final env = DotEnv(quiet: true);
-  env.addAll({
-    convexDeployKeyEnvVar: deployKey,
-    convexUrlEnvVar: url,
-  });
+  env.addAll({convexDeployKeyEnvVar: deployKey, convexUrlEnvVar: url});
   return env;
 }
 

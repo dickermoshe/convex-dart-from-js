@@ -73,9 +73,8 @@ Stream<String> watchFunctionSpec({
   return Rx.combineLatest2(
     functions$,
     url$,
-    (Object? functions, Object? url) => const JsonEncoder.withIndent('  ').convert({
-      'url': convexToJson(url),
-      'functions': convexToJson(functions),
-    }),
+    (Object? functions, Object? url) => const JsonEncoder.withIndent(
+      '  ',
+    ).convert({'url': convexToJson(url), 'functions': convexToJson(functions)}),
   ).distinct().doOnCancel(() => unawaited(close()));
 }
