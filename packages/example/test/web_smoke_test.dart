@@ -1,45 +1,33 @@
 import 'dart:async';
 
-import 'package:convex_dart/src/convex_dart_for_generated_code.dart'
-    as internal;
-import 'package:flutter_test/flutter_test.dart';
-import 'package:integration_test/integration_test.dart';
+import 'package:convex_dart/convex_dart.dart';
+import 'package:example/src/convex/client.dart';
+import 'package:test/test.dart';
 
 void main() {
-  IntegrationTestWidgetsFlutterBinding.ensureInitialized();
+  late MyConvexWebsocketClient client;
 
-  setUpAll(() async {
-    await internal.InternalConvexClient.init(
-      deploymentUrl: 'http://127.0.0.1:3210',
-      logging: true,
-      onStateChange: (_) {},
-    );
+  setUp(() {
+    client = MyConvexWebsocketClient();
   });
 
-  test('query calls through the web Convex client', () async {
-    final result = await internal.InternalConvexClient.instance.query(
-      name: 'primitive_returns:anyReturn',
-      args: const {},
-    );
+  tearDown(() async {
+    await client.close();
+  });
 
-    expect(internal.decodeValue(result), 'Hello');
+  test('query calls through the websocket Convex client', () async {
+    final result = await client.query(api.primitiveReturns.anyReturn, null);
+
+    expect(result, 'Hello');
   });
 
   test('query stream emits and can be cancelled', () async {
-    final firstValue = Completer<String>();
-    late final StreamSubscription<dynamic> subscription;
+    final firstValue = Completer<Object?>();
+    late final StreamSubscription<Object?> subscription;
 
-    subscription = internal.InternalConvexClient.instance
-        .stream<String>(
-          name: 'primitive_returns:anyReturn',
-          args: const {},
-          decodeResult: (value) => internal.decodeValue(value) as String,
-        )
-        .listen((value) {
-          if (!firstValue.isCompleted) {
-            firstValue.complete(value);
-          }
-        }, onError: firstValue.completeError);
+    subscription = client
+        .watch(api.primitiveReturns.anyReturn, null)
+        .listen(firstValue.complete, onError: firstValue.completeError);
 
     final result = await firstValue.future.timeout(const Duration(seconds: 15));
     expect(result, 'Hello');

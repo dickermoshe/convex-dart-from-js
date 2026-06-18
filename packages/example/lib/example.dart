@@ -1,4 +1,4 @@
-import 'package:convex_dart/src/browser.dart';
+import 'package:convex_dart/convex_dart.dart';
 
 class Client {
   final ConvexClient _wsClient;

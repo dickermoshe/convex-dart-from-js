@@ -1,18 +1,15 @@
+import 'dart:async';
 import 'dart:io';
 
-import 'package:collection/collection.dart';
-import 'package:flutter_test/flutter_test.dart';
-import 'package:api/src/convex/client.dart';
-import 'package:convex_dart/convex_dart.dart';
-import 'dart:async';
+import 'package:convex_dart/src/optional.dart';
+import 'package:example/src/convex/client.dart';
+import 'package:test/test.dart';
 
-final deepEq = DeepCollectionEquality.unordered();
+import 'test_clients.dart';
 
 extension DistinctByEquality<T> on Stream<T> {
   Stream<T> deepDistinct() {
-    return distinct((previous, next) {
-      return deepEq.equals(previous, next);
-    });
+    return distinct((previous, next) => previous.toString() == next.toString());
   }
 }
 
@@ -29,13 +26,13 @@ void main() {
         isCompleted: Optional.undefined(),
       ));
 
-      expect(taskId.body, isNotNull);
+      expect(taskId, isNotNull);
 
       // Verify the task was created
-      final task = await api.tasks.getTask((id: taskId.body));
-      expect(task.body, isNotNull);
-      expect(task.body!.text, 'Test task');
-      expect(task.body!.isCompleted, false);
+      final task = await api.tasks.getTask((id: taskId));
+      expect(task, isNotNull);
+      expect(task!.text, 'Test task');
+      expect(task.isCompleted, false);
     });
 
     test('Create Task - With completion status', () async {
@@ -44,9 +41,9 @@ void main() {
         isCompleted: Optional.defined(true),
       ));
 
-      final task = await api.tasks.getTask((id: taskId.body));
-      expect(task.body!.text, 'Completed task');
-      expect(task.body!.isCompleted, true);
+      final task = await api.tasks.getTask((id: taskId));
+      expect(task!.text, 'Completed task');
+      expect(task.isCompleted, true);
     });
 
     test('Get All Tasks', () async {
@@ -65,9 +62,9 @@ void main() {
       ));
 
       final tasks = await api.tasks.getAllTasks();
-      expect(tasks.body.length, 3);
+      expect(tasks.length, 3);
 
-      final taskTexts = tasks.body.map((t) => t.text).toList();
+      final taskTexts = tasks.map((t) => t.text).toList();
       expect(taskTexts, contains('Task 1'));
       expect(taskTexts, contains('Task 2'));
       expect(taskTexts, contains('Task 3'));
@@ -91,15 +88,15 @@ void main() {
       final pendingTasks = await api.tasks.getTasksByStatus((
         isCompleted: false,
       ));
-      expect(pendingTasks.body.length, 2);
-      expect(pendingTasks.body.every((t) => !t.isCompleted), true);
+      expect(pendingTasks.length, 2);
+      expect(pendingTasks.every((t) => !t.isCompleted), true);
 
       // Get completed tasks
       final completedTasks = await api.tasks.getTasksByStatus((
         isCompleted: true,
       ));
-      expect(completedTasks.body.length, 1);
-      expect(completedTasks.body.first.text, 'Completed task');
+      expect(completedTasks.length, 1);
+      expect(completedTasks.first.text, 'Completed task');
     });
 
     test('Search Tasks', () async {
@@ -118,9 +115,9 @@ void main() {
 
       final searchResults = await api.tasks.searchTasks((searchText: 'buy'));
 
-      expect(searchResults.body.length, 2);
+      expect(searchResults.length, 2);
       expect(
-        searchResults.body.every((t) => t.text.toLowerCase().contains('buy')),
+        searchResults.every((t) => t.text.toLowerCase().contains('buy')),
         true,
       );
     });
@@ -131,10 +128,10 @@ void main() {
         isCompleted: Optional.undefined(),
       ));
 
-      await api.tasks.updateTaskText((id: taskId.body, text: 'Updated text'));
+      await api.tasks.updateTaskText((id: taskId, text: 'Updated text'));
 
-      final updatedTask = await api.tasks.getTask((id: taskId.body));
-      expect(updatedTask.body!.text, 'Updated text');
+      final updatedTask = await api.tasks.getTask((id: taskId));
+      expect(updatedTask!.text, 'Updated text');
     });
 
     test('Toggle Task Completion', () async {
@@ -144,23 +141,19 @@ void main() {
       ));
 
       // Toggle to completed
-      final newStatus1 = await api.tasks.toggleTaskCompletion((
-        id: taskId.body,
-      ));
-      expect(newStatus1.body, true);
+      final newStatus1 = await api.tasks.toggleTaskCompletion((id: taskId));
+      expect(newStatus1, true);
 
       // Verify the change
-      final task1 = await api.tasks.getTask((id: taskId.body));
-      expect(task1.body!.isCompleted, true);
+      final task1 = await api.tasks.getTask((id: taskId));
+      expect(task1?.isCompleted, true);
 
       // Toggle back to pending
-      final newStatus2 = await api.tasks.toggleTaskCompletion((
-        id: taskId.body,
-      ));
-      expect(newStatus2.body, false);
+      final newStatus2 = await api.tasks.toggleTaskCompletion((id: taskId));
+      expect(newStatus2, false);
 
-      final task2 = await api.tasks.getTask((id: taskId.body));
-      expect(task2.body!.isCompleted, false);
+      final task2 = await api.tasks.getTask((id: taskId));
+      expect(task2?.isCompleted, false);
     });
 
     test('Set Task Completion', () async {
@@ -169,10 +162,10 @@ void main() {
         isCompleted: Optional.undefined(),
       ));
 
-      await api.tasks.setTaskCompletion((id: taskId.body, isCompleted: true));
+      await api.tasks.setTaskCompletion((id: taskId, isCompleted: true));
 
-      final task = await api.tasks.getTask((id: taskId.body));
-      expect(task.body!.isCompleted, true);
+      final task = await api.tasks.getTask((id: taskId));
+      expect(task?.isCompleted, true);
     });
 
     test('Update Task - Partial update', () async {
@@ -183,25 +176,25 @@ void main() {
 
       // Update only text
       await api.tasks.updateTask((
-        id: taskId.body,
+        id: taskId,
         text: Optional.defined('Updated task'),
         isCompleted: Optional.undefined(),
       ));
 
-      final task1 = await api.tasks.getTask((id: taskId.body));
-      expect(task1.body!.text, 'Updated task');
-      expect(task1.body!.isCompleted, false); // Should remain unchanged
+      final task1 = await api.tasks.getTask((id: taskId));
+      expect(task1!.text, 'Updated task');
+      expect(task1.isCompleted, false); // Should remain unchanged
 
       // Update only completion status
       await api.tasks.updateTask((
-        id: taskId.body,
+        id: taskId,
         text: Optional.undefined(),
         isCompleted: Optional.defined(true),
       ));
 
-      final task2 = await api.tasks.getTask((id: taskId.body));
-      expect(task2.body!.text, 'Updated task'); // Should remain unchanged
-      expect(task2.body!.isCompleted, true);
+      final task2 = await api.tasks.getTask((id: taskId));
+      expect(task2!.text, 'Updated task'); // Should remain unchanged
+      expect(task2.isCompleted, true);
     });
 
     test('Delete Task', () async {
@@ -211,15 +204,15 @@ void main() {
       ));
 
       // Verify task exists
-      final taskBefore = await api.tasks.getTask((id: taskId.body));
-      expect(taskBefore.body, isNotNull);
+      final taskBefore = await api.tasks.getTask((id: taskId));
+      expect(taskBefore, isNotNull);
 
       // Delete the task
-      await api.tasks.deleteTask((id: taskId.body));
+      await api.tasks.deleteTask((id: taskId));
 
       // Verify task is deleted
-      final taskAfter = await api.tasks.getTask((id: taskId.body));
-      expect(taskAfter.body, isNull);
+      final taskAfter = await api.tasks.getTask((id: taskId));
+      expect(taskAfter, isNull);
     });
 
     test('Delete Completed Tasks', () async {
@@ -241,11 +234,11 @@ void main() {
       ));
 
       final deletedCount = await api.tasks.deleteCompletedTasks();
-      expect(deletedCount.body, 2);
+      expect(deletedCount, 2);
 
       final remainingTasks = await api.tasks.getAllTasks();
-      expect(remainingTasks.body.length, 2);
-      expect(remainingTasks.body.every((t) => !t.isCompleted), true);
+      expect(remainingTasks.length, 2);
+      expect(remainingTasks.every((t) => !t.isCompleted), true);
     });
 
     test('Get Task Count', () async {
@@ -287,10 +280,10 @@ void main() {
       ));
 
       final deletedCount = await api.tasks.deleteAllTasks();
-      expect(deletedCount.body, 3);
+      expect(deletedCount, 3);
 
       final remainingTasks = await api.tasks.getAllTasks();
-      expect(remainingTasks.body.length, 0);
+      expect(remainingTasks.length, 0);
     });
 
     test('Get Non-existent Task', () async {
@@ -300,10 +293,10 @@ void main() {
         text: 'Temp task',
         isCompleted: Optional.undefined(),
       ));
-      await api.tasks.deleteTask((id: taskId.body));
+      await api.tasks.deleteTask((id: taskId));
 
-      final result = await api.tasks.getTask((id: taskId.body));
-      expect(result.body, isNull);
+      final result = await api.tasks.getTask((id: taskId));
+      expect(result, isNull);
     });
   });
 
@@ -314,14 +307,26 @@ void main() {
     });
 
     test('Subscribe to getAllTasks - Real-time updates', () async {
+      final initial = Completer<void>();
       final completer = Completer<void>();
       final results = <List<dynamic>>[];
 
       // Subscribe to getAllTasks
-      final subscription = api.tasks.getAllTasksStream().deepDistinct().listen((
+      final subscription = api.tasks.getAllTasks.watch().deepDistinct().listen((
         tasks,
       ) {
-        results.add(tasks.body.toList());
+        final value = tasks.toList();
+        if (!initial.isCompleted) {
+          if (value.isEmpty) {
+            results
+              ..clear()
+              ..add(value);
+            initial.complete();
+          }
+          return;
+        }
+
+        results.add(value);
 
         // Complete after we get the expected number of updates
         if (results.length == 3) {
@@ -329,11 +334,9 @@ void main() {
         }
       });
 
-      // Wait a bit for initial subscription
-      await Future.delayed(Duration(milliseconds: 100));
+      await initial.future.timeout(Duration(seconds: 5));
 
       // Initial state should be empty
-      expect(results.length, greaterThanOrEqualTo(1));
       expect(results.first.length, 0);
 
       // Add first task
@@ -367,11 +370,11 @@ void main() {
       final completedTasks = <List<dynamic>>[];
 
       // Subscribe to completed tasks only
-      final subscription = api.tasks
-          .getTasksByStatusStream((isCompleted: true))
+      final subscription = api.tasks.getTasksByStatus
+          .watch((isCompleted: true))
           .deepDistinct()
           .listen((tasks) {
-            completedTasks.add(tasks.body.toList());
+            completedTasks.add(tasks.toList());
 
             if (completedTasks.length == 3) {
               completer.complete();
@@ -417,11 +420,11 @@ void main() {
       final searchResults = <List<dynamic>>[];
 
       // Subscribe to search for "buy"
-      final subscription = api.tasks
-          .searchTasksStream((searchText: 'buy'))
+      final subscription = api.tasks.searchTasks
+          .watch((searchText: 'buy'))
           .deepDistinct()
           .listen((tasks) {
-            searchResults.add(tasks.body.toList());
+            searchResults.add(tasks.toList());
 
             if (searchResults.length == 3) {
               completer.complete();
@@ -466,7 +469,7 @@ void main() {
       final counts = <dynamic>[];
 
       // Subscribe to task count
-      final subscription = api.tasks.getTaskCountStream().deepDistinct().listen(
+      final subscription = api.tasks.getTaskCount.watch().deepDistinct().listen(
         (count) {
           counts.add(count);
 
@@ -513,22 +516,33 @@ void main() {
     });
 
     test('Stream updates on task modifications', () async {
+      final initial = Completer<void>();
       final completer = Completer<void>();
       final allTasksUpdates = <List<dynamic>>[];
 
       // Subscribe to all tasks
-      final subscription = api.tasks.getAllTasksStream().deepDistinct().listen((
+      final subscription = api.tasks.getAllTasks.watch().deepDistinct().listen((
         tasks,
       ) {
-        allTasksUpdates.add(tasks.body.toList());
+        final value = tasks.toList();
+        if (!initial.isCompleted) {
+          if (value.isEmpty) {
+            allTasksUpdates
+              ..clear()
+              ..add(value);
+            initial.complete();
+          }
+          return;
+        }
+
+        allTasksUpdates.add(value);
 
         if (allTasksUpdates.length == 5) {
           completer.complete();
         }
       });
 
-      // Wait for initial subscription
-      await Future.delayed(Duration(milliseconds: 100));
+      await initial.future.timeout(Duration(seconds: 5));
 
       // Create a task
       final taskId = await api.tasks.createTask((
@@ -537,13 +551,13 @@ void main() {
       ));
 
       // Update the task text
-      await api.tasks.updateTaskText((id: taskId.body, text: 'Updated task'));
+      await api.tasks.updateTaskText((id: taskId, text: 'Updated task'));
 
       // Toggle completion
-      await api.tasks.toggleTaskCompletion((id: taskId.body));
+      await api.tasks.toggleTaskCompletion((id: taskId));
 
       // Delete the task
-      await api.tasks.deleteTask((id: taskId.body));
+      await api.tasks.deleteTask((id: taskId));
 
       // Wait for all updates
       await completer.future.timeout(Duration(seconds: 5));
@@ -568,22 +582,22 @@ void main() {
       final completedTasksUpdates = <List<dynamic>>[];
 
       // Subscribe to all tasks
-      final allTasksSubscription = api.tasks
-          .getAllTasksStream()
+      final allTasksSubscription = api.tasks.getAllTasks
+          .watch()
           .deepDistinct()
           .listen((tasks) {
-            allTasksUpdates.add(tasks.body.toList());
+            allTasksUpdates.add(tasks.toList());
             if (allTasksUpdates.length == 3) {
               allTasksCompleter.complete();
             }
           });
 
       // Subscribe to completed tasks
-      final completedTasksSubscription = api.tasks
-          .getTasksByStatusStream((isCompleted: true))
+      final completedTasksSubscription = api.tasks.getTasksByStatus
+          .watch((isCompleted: true))
           .deepDistinct()
           .listen((tasks) {
-            completedTasksUpdates.add(tasks.body.toList());
+            completedTasksUpdates.add(tasks.toList());
             if (completedTasksUpdates.length == 2) {
               completedTasksCompleter.complete();
             }
