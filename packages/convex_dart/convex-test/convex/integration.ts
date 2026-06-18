@@ -61,6 +61,30 @@ export const throws = query({
   },
 });
 
+export const throwsString = query({
+  args: {},
+  returns: v.null(),
+  handler: async () => {
+    throw new ConvexError("string error");
+  },
+});
+
+export const throwsMutation = mutation({
+  args: {},
+  returns: v.null(),
+  handler: async () => {
+    throw new ConvexError({ code: "mutation" });
+  },
+});
+
+export const throwsAction = action({
+  args: {},
+  returns: v.null(),
+  handler: async () => {
+    throw new ConvexError({ code: "action" });
+  },
+});
+
 export const authRequired = query({
   args: {},
   returns: v.string(),

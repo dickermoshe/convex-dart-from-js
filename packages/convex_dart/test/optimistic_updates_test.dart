@@ -83,8 +83,25 @@ void main() {
       }, {});
       expect(
         () => results.queryResult(token),
-        throwsA(isA<ConvexError<Object?>>()),
+        throwsA(
+          isA<ConvexError<Object?>>()
+              .having((e) => e.message, 'message', 'bad')
+              .having((e) => e.data, 'data', {'code': 1}),
+        ),
       );
+    });
+
+    test('query failure without data throws StateError', () {
+      final results = makeResults();
+      final token = serializePathAndArgs('messages:list', {});
+      results.ingestQueryResultsFromServer({
+        token: Query(
+          result: functionFailure('bad', const []),
+          udfPath: 'messages:list',
+          args: {},
+        ),
+      }, {});
+      expect(() => results.queryResult(token), throwsStateError);
     });
 
     test('optimistic store getAllQueries via callback', () {

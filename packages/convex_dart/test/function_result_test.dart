@@ -18,6 +18,15 @@ void main() {
 
       final withData = functionFailure('boom', [], errorData: {'code': 1});
       expect(withData['errorData'], {'code': 1});
+
+      final withNullData = functionFailure(
+        'boom',
+        [],
+        errorData: null,
+        hasErrorData: true,
+      );
+      expect(withNullData.containsKey('errorData'), isTrue);
+      expect(withNullData['errorData'], isNull);
     });
   });
 }

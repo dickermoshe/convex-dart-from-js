@@ -70,6 +70,39 @@ void main() {
       );
     });
 
+    test('throws ConvexError with string data', () async {
+      await expectLater(
+        retry(() => client.rawQuery('integration:throwsString', {})),
+        throwsA(
+          isA<ConvexError<Object?>>()
+              .having((e) => e.message, 'message', isNotEmpty)
+              .having((e) => e.data, 'data', 'string error'),
+        ),
+      );
+    });
+
+    test('mutation throws ConvexError with data', () async {
+      await expectLater(
+        retry(() => client.rawMutation('integration:throwsMutation', {})),
+        throwsA(
+          isA<ConvexError<Object?>>()
+              .having((e) => e.message, 'message', isNotEmpty)
+              .having((e) => e.data, 'data', {'code': 'mutation'}),
+        ),
+      );
+    });
+
+    test('action throws ConvexError with data', () async {
+      await expectLater(
+        retry(() => client.rawAction('integration:throwsAction', {})),
+        throwsA(
+          isA<ConvexError<Object?>>()
+              .having((e) => e.message, 'message', isNotEmpty)
+              .having((e) => e.data, 'data', {'code': 'action'}),
+        ),
+      );
+    });
+
     test(
       'auth required query with token',
       () async {

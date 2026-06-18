@@ -148,7 +148,41 @@ void main() {
       expect(await actionFuture, 'done');
     });
 
-    test('QueryFailed surfaces error to local query result', () {
+    test('QueryFailed with errorData surfaces ConvexError', () {
+      late FakeSocket socket;
+      final client = BaseConvexClient(
+        'https://x.convex.cloud',
+        (_) {},
+        options: BaseConvexClientOptions(
+          webSocketFactory: (_) => socket = FakeSocket(),
+        ),
+      );
+      final sub = client.subscribe('broken:list', {});
+      socket.open();
+      socket.message(
+        transitionJson(
+          startQuerySet: 0,
+          endQuerySet: 1,
+          modifications: [
+            queryFailed(
+              queryId: 0,
+              errorMessage: 'query failed',
+              errorData: {'code': 'query'},
+            ),
+          ],
+        ),
+      );
+      expect(
+        () => client.localQueryResultByToken(sub.queryToken),
+        throwsA(
+          isA<ConvexError<Object?>>()
+              .having((e) => e.message, 'message', 'query failed')
+              .having((e) => e.data, 'data', {'code': 'query'}),
+        ),
+      );
+    });
+
+    test('QueryFailed without errorData surfaces StateError', () {
       late FakeSocket socket;
       final client = BaseConvexClient(
         'https://x.convex.cloud',
@@ -170,7 +204,75 @@ void main() {
       );
       expect(
         () => client.localQueryResultByToken(sub.queryToken),
-        throwsA(isA<ConvexError<Object?>>()),
+        throwsStateError,
+      );
+    });
+
+    test('mutation failure with errorData throws ConvexError', () async {
+      late FakeSocket socket;
+      final client = BaseConvexClient(
+        'https://x.convex.cloud',
+        (_) {},
+        options: BaseConvexClientOptions(
+          webSocketFactory: (_) => socket = FakeSocket(),
+        ),
+      );
+      socket.open();
+      socket.message(
+        transitionJson(startQuerySet: 0, endQuerySet: 1, modifications: []),
+      );
+      final mutation = client.mutation('broken', {});
+      final msg = sentMessage(socket.sent, socket.sent.length - 1);
+      socket.message(
+        mutationResponseJson(
+          requestId: msg['requestId']! as int,
+          success: false,
+          result: 'mutation failed',
+          errorData: {'code': 'mutation'},
+        ),
+      );
+
+      await expectLater(
+        mutation,
+        throwsA(
+          isA<ConvexError<Object?>>()
+              .having((e) => e.message, 'message', 'mutation failed')
+              .having((e) => e.data, 'data', {'code': 'mutation'}),
+        ),
+      );
+    });
+
+    test('action failure with errorData throws ConvexError', () async {
+      late FakeSocket socket;
+      final client = BaseConvexClient(
+        'https://x.convex.cloud',
+        (_) {},
+        options: BaseConvexClientOptions(
+          webSocketFactory: (_) => socket = FakeSocket(),
+        ),
+      );
+      socket.open();
+      socket.message(
+        transitionJson(startQuerySet: 0, endQuerySet: 1, modifications: []),
+      );
+      final action = client.action('broken', {});
+      final msg = sentMessage(socket.sent, socket.sent.length - 1);
+      socket.message(
+        actionResponseJson(
+          requestId: msg['requestId']! as int,
+          success: false,
+          result: 'action failed',
+          errorData: {'code': 'action'},
+        ),
+      );
+
+      await expectLater(
+        action,
+        throwsA(
+          isA<ConvexError<Object?>>()
+              .having((e) => e.message, 'message', 'action failed')
+              .having((e) => e.data, 'data', {'code': 'action'}),
+        ),
       );
     });
 

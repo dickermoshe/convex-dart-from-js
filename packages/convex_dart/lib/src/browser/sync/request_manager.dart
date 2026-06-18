@@ -65,6 +65,7 @@ class RequestManager {
         errorData: response.containsKey('errorData')
             ? jsonToConvex(response['errorData'])
             : null,
+        hasErrorData: response.containsKey('errorData'),
       );
     }
     if (response['type'] == 'ActionResponse' || response['success'] != true) {

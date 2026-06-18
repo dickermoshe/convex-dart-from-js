@@ -108,8 +108,8 @@ ConvexError<Object?> forwardData(
   Map<String, Object?> result,
   ConvexError<Object?> error,
 ) {
-  final data = result['errorData'];
-  if (data != null) {
+  if (result.containsKey('errorData')) {
+    final data = result['errorData'];
     error.data = data is Map || data is List ? jsonToConvex(data) : data;
   }
   return error;

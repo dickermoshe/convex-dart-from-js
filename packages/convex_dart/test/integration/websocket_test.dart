@@ -95,6 +95,48 @@ void main() {
       );
     });
 
+    test('rawQuery throws ConvexError with string data', () async {
+      final client = ConvexClient(url);
+      addTearDown(() => client.close());
+
+      await expectLater(
+        retry(() => client.rawQuery('integration:throwsString', {})),
+        throwsA(
+          isA<ConvexError<Object?>>()
+              .having((e) => e.message, 'message', isNotEmpty)
+              .having((e) => e.data, 'data', 'string error'),
+        ),
+      );
+    });
+
+    test('rawMutation throws ConvexError with data', () async {
+      final client = ConvexClient(url);
+      addTearDown(() => client.close());
+
+      await expectLater(
+        retry(() => client.rawMutation('integration:throwsMutation', {})),
+        throwsA(
+          isA<ConvexError<Object?>>()
+              .having((e) => e.message, 'message', isNotEmpty)
+              .having((e) => e.data, 'data', {'code': 'mutation'}),
+        ),
+      );
+    });
+
+    test('rawAction throws ConvexError with data', () async {
+      final client = ConvexClient(url);
+      addTearDown(() => client.close());
+
+      await expectLater(
+        retry(() => client.rawAction('integration:throwsAction', {})),
+        throwsA(
+          isA<ConvexError<Object?>>()
+              .having((e) => e.message, 'message', isNotEmpty)
+              .having((e) => e.data, 'data', {'code': 'action'}),
+        ),
+      );
+    });
+
     test('onUpdate receives reactive query results', () async {
       final client = ConvexClient(url);
       addTearDown(() => client.close());

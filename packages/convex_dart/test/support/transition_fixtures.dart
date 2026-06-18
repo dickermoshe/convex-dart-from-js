@@ -38,12 +38,13 @@ Map<String, Object?> queryFailed({
   required String errorMessage,
   List<String> logLines = const [],
   Object? errorData,
+  bool hasErrorData = false,
 }) => {
   'type': 'QueryFailed',
   'queryId': queryId,
   'errorMessage': errorMessage,
   'logLines': logLines,
-  'errorData': ?errorData,
+  if (hasErrorData || errorData != null) 'errorData': errorData,
 };
 
 Map<String, Object?> queryRemoved({required int queryId}) => {
@@ -58,6 +59,7 @@ String mutationResponseJson({
   String ts = 'AQAAAAAAAAA=',
   List<String> logLines = const [],
   Object? errorData,
+  bool hasErrorData = false,
 }) => jsonEncode({
   'type': 'MutationResponse',
   'requestId': requestId,
@@ -65,7 +67,7 @@ String mutationResponseJson({
   'result': result,
   'ts': ts,
   'logLines': logLines,
-  'errorData': ?errorData,
+  if (hasErrorData || errorData != null) 'errorData': errorData,
 });
 
 String actionResponseJson({
@@ -74,13 +76,14 @@ String actionResponseJson({
   Object? result,
   List<String> logLines = const [],
   Object? errorData,
+  bool hasErrorData = false,
 }) => jsonEncode({
   'type': 'ActionResponse',
   'requestId': requestId,
   'success': success,
   'result': result,
   'logLines': logLines,
-  'errorData': ?errorData,
+  if (hasErrorData || errorData != null) 'errorData': errorData,
 });
 
 String authErrorJson() => jsonEncode({'type': 'AuthError'});

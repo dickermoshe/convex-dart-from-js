@@ -79,12 +79,21 @@ void main() {
           startQuerySet: 0,
           endQuerySet: 2,
           modifications: [
-            queryFailed(queryId: 0, errorMessage: 'bad'),
+            queryFailed(
+              queryId: 0,
+              errorMessage: 'bad',
+              errorData: {'code': 'query'},
+            ),
             queryUpdated(queryId: 1, value: 'ok'),
           ],
         ),
       );
-      expect(error, isA<ConvexError<Object?>>());
+      expect(
+        error,
+        isA<ConvexError<Object?>>()
+            .having((e) => e.message, 'message', 'bad')
+            .having((e) => e.data, 'data', {'code': 'query'}),
+      );
       expect(values, ['ok']);
     });
 

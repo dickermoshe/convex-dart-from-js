@@ -86,10 +86,13 @@ class OptimisticQueryResults {
   static Object? _queryValue(FunctionResult? result) {
     if (result == null) return null;
     if (result['success'] == true) return result['value'];
-    throw ConvexError<Object?>(
-      result['errorData'] ?? result['errorMessage'],
-      message: result['errorMessage'] as String?,
-    );
+    if (result.containsKey('errorData')) {
+      throw ConvexError<Object?>(
+        result['errorData'],
+        message: result['errorMessage'] as String?,
+      );
+    }
+    throw StateError(result['errorMessage'] as String? ?? 'Convex error');
   }
 
   Map<String, String> _snapshot(QueryResultsMap map) => {

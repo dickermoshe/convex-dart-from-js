@@ -267,6 +267,80 @@ void main() {
       );
     });
 
+    test('throws ConvexError for forwarded null error data', () async {
+      final fake = FakeHttpClient((request) async {
+        return jsonResponse({
+          'status': 'error',
+          'errorMessage': 'boom',
+          'errorData': null,
+          'logLines': [],
+        }, statusCode: statusCodeUdfFailed);
+      });
+      final client = ConvexHttpClient(
+        'https://x.convex.cloud',
+        options: ConvexHttpClientOptions(httpClient: fake),
+      );
+
+      await expectLater(
+        client.rawQuery('broken', {}),
+        throwsA(
+          isA<ConvexError<Object?>>()
+              .having((e) => e.message, 'message', 'boom')
+              .having((e) => e.data, 'data', isNull),
+        ),
+      );
+    });
+
+    test('throws ConvexError from mutation application errors', () async {
+      final fake = FakeHttpClient((request) async {
+        expect(request.url.toString(), 'https://x.convex.cloud/api/mutation');
+        return jsonResponse({
+          'status': 'error',
+          'errorMessage': 'mutation failed',
+          'errorData': {'code': 'mutation'},
+          'logLines': [],
+        }, statusCode: statusCodeUdfFailed);
+      });
+      final client = ConvexHttpClient(
+        'https://x.convex.cloud',
+        options: ConvexHttpClientOptions(httpClient: fake),
+      );
+
+      await expectLater(
+        client.rawMutation('broken', {}),
+        throwsA(
+          isA<ConvexError<Object?>>()
+              .having((e) => e.message, 'message', 'mutation failed')
+              .having((e) => e.data, 'data', {'code': 'mutation'}),
+        ),
+      );
+    });
+
+    test('throws ConvexError from action application errors', () async {
+      final fake = FakeHttpClient((request) async {
+        expect(request.url.toString(), 'https://x.convex.cloud/api/action');
+        return jsonResponse({
+          'status': 'error',
+          'errorMessage': 'action failed',
+          'errorData': {'code': 'action'},
+          'logLines': [],
+        }, statusCode: statusCodeUdfFailed);
+      });
+      final client = ConvexHttpClient(
+        'https://x.convex.cloud',
+        options: ConvexHttpClientOptions(httpClient: fake),
+      );
+
+      await expectLater(
+        client.rawAction('broken', {}),
+        throwsA(
+          isA<ConvexError<Object?>>()
+              .having((e) => e.message, 'message', 'action failed')
+              .having((e) => e.data, 'data', {'code': 'action'}),
+        ),
+      );
+    });
+
     test('throws response body for non-UDF HTTP failures', () async {
       final fake = FakeHttpClient((request) async {
         return http.Response('nope', 500);

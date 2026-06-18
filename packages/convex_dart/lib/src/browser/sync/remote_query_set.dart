@@ -43,6 +43,7 @@ class RemoteQuerySet {
             errorData: mod.containsKey('errorData')
                 ? jsonToConvex(mod['errorData'])
                 : null,
+            hasErrorData: mod.containsKey('errorData'),
           );
           break;
         case 'QueryRemoved':

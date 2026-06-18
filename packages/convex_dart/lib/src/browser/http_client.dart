@@ -255,10 +255,9 @@ class ConvexHttpClient {
       case 'success':
         return jsonToConvex(json['value']);
       case 'error':
-        final errorData = json['errorData'];
-        if (errorData != null) {
+        if (json.containsKey('errorData')) {
           throw ConvexError<Object?>(
-            jsonToConvex(errorData),
+            jsonToConvex(json['errorData']),
             message: json['errorMessage'] as String?,
           );
         }
