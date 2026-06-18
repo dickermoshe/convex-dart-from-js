@@ -10,7 +10,7 @@ abstract interface class OptimisticLocalStore {
   /// [query] is the name of the query. [args] are the query arguments.
   /// Returns the query result, or `null` if the query is not currently in the
   /// client.
-  Object? getQuery(String query, [Map<String, Object?>? args]);
+  Object? getRawQuery(String query, [Map<String, Object?>? args]);
 
   /// Retrieves the results and arguments of all queries with a given name.
   ///
@@ -24,20 +24,20 @@ abstract interface class OptimisticLocalStore {
   /// [query] is the name of the query. Returns one entry per active query of
   /// that name, each with `args` and `value` (which may be `null` while
   /// loading).
-  List<({Map<String, Object?> args, Object? value})> getAllQueries(
+  List<({Map<String, Object?> args, Object? value})> getAllRawQueries(
     String query,
   );
 
   /// Optimistically updates the result of a query.
   ///
-  /// [value] may be derived from the old value from [getQuery], or `null` to
+  /// [value] may be derived from the old value from [getRawQuery], or `null` to
   /// remove the query. Removing a query is useful to create loading states while
   /// Convex recomputes the query results.
   ///
   /// [query] is the name of the query. [args] are the query arguments.
   /// [value] is the new value to set the query to, or `null` to remove it from
   /// the client.
-  void setQuery(String query, Map<String, Object?> args, Object? value);
+  void setRawQuery(String query, Map<String, Object?> args, Object? value);
 }
 
 /// A temporary, local update to query results within this client.

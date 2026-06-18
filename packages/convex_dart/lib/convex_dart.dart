@@ -13,6 +13,7 @@ sealed class ConvexFunction<Args, Returns> {
   final String path;
   ConvexFunction(this.path);
   Map<String, Object?> parseArgs(Args? args);
+  Args parseArgsFromRaw(Map<String, Object?> rawArgs);
   Returns parseReturns(Object? returns);
 }
 
@@ -44,7 +45,7 @@ extension ConvexHttpClientExtension on ConvexHttpClient {
   Future<Returns>
   mutation<Args, Returns, Mutation extends ConvexMutation<Args, Returns>>(
     Mutation mutation,
-    Args? args, [
+    Args args, [
     HttpMutationOptions options = const HttpMutationOptions(),
   ]) async {
     final raw = await rawMutation(
@@ -59,7 +60,7 @@ extension ConvexHttpClientExtension on ConvexHttpClient {
     Args,
     Returns,
     Action extends ConvexAction<Args, Returns>
-  >(Action action, Args? args) async {
+  >(Action action, Args args) async {
     final raw = await rawAction(action.path, action.parseArgs(args));
     return action.parseReturns(raw);
   }
@@ -70,7 +71,7 @@ extension ConvexClientExtension on ConvexClient {
     Args,
     Returns,
     Query extends ConvexQuery<Args, Returns>
-  >(Query query, Args? args) async {
+  >(Query query, Args args) async {
     final raw = await rawQuery(query.path, query.parseArgs(args));
     return query.parseReturns(raw);
   }
@@ -79,12 +80,8 @@ extension ConvexClientExtension on ConvexClient {
     Args,
     Returns,
     Mutation extends ConvexMutation<Args, Returns>
-  >(Mutation mutation, Args? args, [OptimisticUpdate? optimisticUpdate]) async {
-    final raw = await rawMutation(
-      mutation.path,
-      mutation.parseArgs(args),
-      optimisticUpdate: optimisticUpdate,
-    );
+  >(Mutation mutation, Args args, [OptimisticUpdate? optimisticUpdate]) async {
+    final raw = await rawMutation(mutation.path, mutation.parseArgs(args));
     return mutation.parseReturns(raw);
   }
 
@@ -101,7 +98,7 @@ extension ConvexClientExtension on ConvexClient {
     Args,
     Returns,
     Query extends ConvexQuery<Args, Returns>
-  >(Query query, Args? args) {
+  >(Query query, Args args) {
     Unsubscribe<dynamic>? sub;
 
     final c = StreamController<Returns>();
@@ -122,5 +119,40 @@ extension ConvexClientExtension on ConvexClient {
     final c = StreamController<ConnectionState>();
     c.onCancel = subscribeToConnectionState(c.add);
     return c.stream;
+  }
+}
+
+extension OptimisticLocalStoreExtention on OptimisticLocalStore {
+  Returns? getQuery<Args, Returns>(
+    ConvexQuery<Args, Returns> query,
+    Args args,
+  ) {
+    final raw = getRawQuery(query.path, query.parseArgs(args));
+    if (raw == null) {
+      return null;
+    }
+    return query.parseReturns(raw);
+  }
+
+  List<({Args args, Returns? value})> getAllQueries<Args, Returns>(
+    ConvexQuery<Args, Returns> query,
+  ) {
+    return [
+      for (final rawQuery in getAllRawQueries(query.path))
+        (
+          args: query.parseArgsFromRaw(rawQuery.args),
+          value: rawQuery.value == null
+              ? null
+              : query.parseReturns(rawQuery.value),
+        ),
+    ];
+  }
+
+  void setQuery<Args, Returns>(
+    ConvexQuery<Args, Returns> query,
+    Args args,
+    Returns value,
+  ) {
+    setRawQuery(query.path, query.parseArgs(args), value);
   }
 }

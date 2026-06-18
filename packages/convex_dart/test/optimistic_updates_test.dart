@@ -33,7 +33,7 @@ void main() {
       }, {});
       results.applyOptimisticUpdate(
         (store, args) {
-          store.setQuery('messages:list', {}, [args['body']]);
+          store.setRawQuery('messages:list', {}, [args['body']]);
         },
         1,
         {'body': 'hi'},
@@ -53,7 +53,7 @@ void main() {
       }, {});
       results.applyOptimisticUpdate(
         (store, args) {
-          store.setQuery('messages:list', {}, ['opt']);
+          store.setRawQuery('messages:list', {}, ['opt']);
         },
         9,
         {},
@@ -100,7 +100,7 @@ void main() {
       var allCount = 0;
       results.applyOptimisticUpdate(
         (store, _) {
-          allCount = store.getAllQueries('messages:list').length;
+          allCount = store.getAllRawQueries('messages:list').length;
         },
         1,
         {},

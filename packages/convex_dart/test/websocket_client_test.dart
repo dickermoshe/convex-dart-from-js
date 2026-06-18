@@ -112,8 +112,8 @@ void main() {
         MutationOptions(
           optimisticUpdate: (store, args) {
             final current =
-                (store.getQuery('messages:list', {}) as List?) ?? [];
-            store.setQuery('messages:list', {}, [...current, args['body']]);
+                (store.getRawQuery('messages:list', {}) as List?) ?? [];
+            store.setRawQuery('messages:list', {}, [...current, args['body']]);
           },
         ),
       );

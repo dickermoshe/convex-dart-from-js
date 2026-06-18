@@ -119,13 +119,13 @@ class _OptimisticLocalStoreImpl implements OptimisticLocalStore {
   final QueryResultsMap results;
 
   @override
-  Object? getQuery(String query, [Map<String, Object?>? args]) {
+  Object? getRawQuery(String query, [Map<String, Object?>? args]) {
     final token = serializePathAndArgs(query, args ?? const {});
     return OptimisticQueryResults._queryValue(results[token]?.result);
   }
 
   @override
-  List<({Map<String, Object?> args, Object? value})> getAllQueries(
+  List<({Map<String, Object?> args, Object? value})> getAllRawQueries(
     String query,
   ) {
     final canonical = canonicalizeUdfPath(query);
@@ -140,7 +140,7 @@ class _OptimisticLocalStoreImpl implements OptimisticLocalStore {
   }
 
   @override
-  void setQuery(String query, Map<String, Object?> args, Object? value) {
+  void setRawQuery(String query, Map<String, Object?> args, Object? value) {
     final canonical = canonicalizeUdfPath(query);
     final token = serializePathAndArgs(canonical, args);
     results[token] = Query(
