@@ -48,29 +48,6 @@ class TempNameAllocator {
   }
 }
 
-/// A simple wrapper around a function spec that provides some helper utilities
-/// for importing the function in other generated files.
-class BuiltFunctionSpec {
-  final int index;
-  final FunctionSpec function;
-  BuiltFunctionSpec({required this.index, required this.function});
-
-  /// The parts of the path to the function
-  List<String> get parts => function.pathParts;
-
-  /// Relative path to the function from the root of the generated files
-  String get importPath => "./functions/${function.pathParts.join("/")}";
-  String get prefix => (function.functionName + index.toString()).camelCase;
-  // The names of the function that are in this file
-  List<String> get functionNames => [
-    function.functionName,
-    if (function.functionType == 'Query') '${function.functionName}Stream',
-  ];
-  String? get streamFunctionName => function.functionType == 'Query'
-      ? '${function.functionName}Stream'
-      : null;
-}
-
 @MappableClass()
 class FunctionsSpec with FunctionsSpecMappable {
   final String url;
@@ -82,32 +59,27 @@ class FunctionsSpec with FunctionsSpecMappable {
     ClientBuildContext context, {
     required bool publicSerialize,
   }) async {
-    final validFunctionSpecs = <BuiltFunctionSpec>[];
+    final moduleContexts = <String, FunctionBuildContext>{};
 
     // Create the functions
-    for (final (index, function)
-        in functions.whereType<FunctionSpec>().indexed) {
+    for (final function in functions.whereType<FunctionSpec>()) {
       try {
         // Skip internal functions
         if (function.visibility.kind == VisibilityType.internal) {
           continue;
         }
-        // Build the function
-        final functionContext = FunctionBuildContext(context);
-        function.build(functionContext, publicSerialize: publicSerialize);
-        // Combine the code
-        final code =
-            '${functionContext.headerBuffer}'
-            '\n${functionContext.functionBuffer}'
-            '\n${functionContext.typedefBuffer}';
-        // Add the code to the context
-        final filePath = path.joinAll(['functions', ...function.pathParts]);
-        context.outputs[filePath] = code;
-
-        validFunctionSpecs.add(
-          BuiltFunctionSpec(index: index, function: function),
+        // Build the function into the Dart file matching its source module.
+        final filePath = path.posix.joinAll([
+          'functions',
+          ...function.modulePathParts,
+        ]);
+        final functionContext = moduleContexts.putIfAbsent(
+          filePath,
+          () => FunctionBuildContext(context),
         );
+        function.build(functionContext, publicSerialize: publicSerialize);
       } catch (e, stackTrace) {
+        // ignore: avoid_print
         print(
           'ERROR: Failed to build function ${function.convexFunctionIdentifier}\n'
           '  Function Type: ${function.functionType}\n'
@@ -123,10 +95,14 @@ class FunctionsSpec with FunctionsSpecMappable {
       }
     }
 
-    final httpFunctions = functions.whereType<HttpFunctionSpec>();
+    for (final entry in moduleContexts.entries) {
+      final functionContext = entry.value;
+      context.outputs[entry.key] =
+          '${functionContext.headerBuffer}'
+          '\n${functionContext.functionBuffer}'
+          '\n${functionContext.typedefBuffer}';
+    }
 
-    // Create the client.dart file
-    buildClient(context, httpFunctions, validFunctionSpecs);
     // Create the schema.dart file
     _buildSchema(context);
     // Create the literals.dart file
@@ -140,6 +116,7 @@ class FunctionsSpec with FunctionsSpecMappable {
         formattedCount++;
       } catch (e) {
         formatFailedCount++;
+        // ignore: avoid_print
         print(
           'WARNING: Failed to format generated file ${entry.key}\n'
           '  Error: $e\n'
@@ -159,12 +136,12 @@ class FunctionsSpec with FunctionsSpecMappable {
 
   void _buildSchema(ClientBuildContext context) {
     final schemaBuffer = StringBuffer("""
-// ignore_for_file: type=lint, unused_import, unnecessary_question_mark, dead_code
+// ignore_for_file: type=lint, unused_import, unnecessary_question_mark, dead_code,unnecessary_non_null_assertion
 // ignore_for_file: unused_element, unnecessary_cast, override_on_non_overriding_member
 // ignore_for_file: strict_raw_type, inference_failure_on_untyped_parameter, invalid_use_of_internal_member
 import "dart:typed_data";
 import 'dart:async';
-import "package:convex_dart/src/convex_dart_for_generated_code.dart";
+import "package:convex_dart/convex_dart.dart";
 """);
     for (final tableName in context.tables) {
       schemaBuffer.writeln('''
@@ -191,114 +168,7 @@ class ${tableName.pascalCase}Id  implements TableId {
 }
 ''');
     }
-    context.outputs[path.join('schema.dart')] = schemaBuffer.toString();
-  }
-
-  void buildClient(
-    ClientBuildContext context,
-    Iterable<HttpFunctionSpec> httpFunctions,
-    Iterable<BuiltFunctionSpec> builtFunctionSpecs,
-  ) {
-    final httpFunctionsBuffer = StringBuffer();
-    for (final httpFunction in httpFunctions) {
-      try {
-        httpFunctionsBuffer.writeln(httpFunction.build());
-      } catch (e, stackTrace) {
-        print(
-          'WARNING: Skipping function ${httpFunction.method.name} ${httpFunction.path} due to error: $e\n'
-          '  Error: $e\n'
-          '  Stack Trace: $stackTrace\n',
-        );
-      }
-    }
-
-    final tree = TreeNode();
-    for (final spec in builtFunctionSpecs) {
-      var root = tree;
-      for (final part in spec.parts.getRange(0, spec.parts.length - 1)) {
-        final node = root.children.putIfAbsent(part, () => TreeNode());
-        if (node is! TreeNode) {
-          throw StateError(
-            "Unable to build API: A function cannot have the same name as a folder. Found both a folder and a function named '$part'. Example conflict: 'api/foo/anotherQuery1.dart' (folder) and 'api/foo.dart' (file).",
-          );
-        }
-        root = node;
-      }
-      root.children.putIfAbsent(spec.parts.last, () => LeafNode(spec));
-    }
-
-    // Create the client.dart file
-    context.outputs[path.join('client.dart')] =
-        """
-// ignore_for_file: type=lint, unused_import, unnecessary_question_mark, dead_code
-// ignore_for_file: unused_element, unnecessary_cast, override_on_non_overriding_member
-// ignore_for_file: strict_raw_type, inference_failure_on_untyped_parameter, invalid_use_of_internal_member
-import 'package:convex_dart/src/convex_dart_for_generated_code.dart'
-    as internal;
-import 'package:http/http.dart' as \$http;
-import 'dart:async';
-import 'dart:convert' as \$convert;
-${builtFunctionSpecs.map((spec) => "import '${spec.importPath}' as ${spec.prefix} show ${spec.functionNames.join(",")};").join("\n")}
-class ConvexClient {
-  /// Initializes the ConvexClient singleton instance. Calling this method more than once will have no effect.
-  /// 
-  /// [logging] turns on diagnostic output from the native Rust client—WebSocket
-  /// reconnects, subscriptions, auth, and other SDK internals. This is not the
-  /// same as function logs in the Convex dashboard; those stay on the server.
-  /// When enabled, messages go to the platform log: Logcat on Android (tag
-  /// `ConvexMobile`), Xcode Console / os_log on iOS, and stderr on desktop.
-  /// 
-  /// [onStateChange] is a callback that will be called when the WebSocket state changes.
-  static Future<void> init({required bool logging, FutureOr<void> Function(internal.WebSocketState)? onStateChange}) async {
-    await internal.InternalConvexClient.init(
-      deploymentUrl: "$url",
-      logging: logging,
-      onStateChange: onStateChange,
-    );
-  }
-
-  /// Set auth for use when calling Convex functions.
-  ///
-  /// Set it with a token that you get from your auth provider via their login
-  /// flow. If `None` is passed as the token, then auth is unset (logging
-  /// out).
-  ///
-  /// Internally this wraps the static token in a trivial callback and the
-  /// same token is re-sent on websocket reconnect.
-  ///
-  /// Prefer [setAuthCallback] - it will allow fetching a
-  /// fresh token after a websocket reconnect. That's important because
-  /// the original token might have expired while the socket was
-  /// disconnected.
-  Future<void> setAuth({required String? token}) async {
-    await internal.InternalConvexClient.instance.setAuth(token: token);
-  }
-
-  /// Set an auth token fetcher callback for use when calling Convex
-  /// functions.
-  ///
-  /// The callback is invoked immediately (with `force_refresh=false`) and
-  /// again on every websocket reconnect (with `force_refresh=true`),
-  /// allowing dynamic token refresh.
-  ///
-  /// Pass [null] to clear the callback and log out.
-  Future<void> setAuthCallback({
-    required FutureOr<String> Function(bool)? fetcher,
-  }) async {
-    await internal.InternalConvexClient.instance.setAuthCallback(
-      fetcher: fetcher,
-    );
-  }
-
-  static final String httpUrl = "${url.replaceAll(RegExp(r'\.cloud$'), '.site')}";
-
-  $httpFunctionsBuffer
-
-}
-
-
-${tree.children.isNotEmpty ? "final api = ${tree.build()};" : ""}
-    """;
+    context.outputs[path.posix.join('schema.dart')] = schemaBuffer.toString();
   }
 
   void _buildLiterals(ClientBuildContext context) {
@@ -306,7 +176,7 @@ ${tree.children.isNotEmpty ? "final api = ${tree.build()};" : ""}
 // ignore_for_file: type=lint, unused_import, unnecessary_question_mark, dead_code
 // ignore_for_file: unused_element, unnecessary_cast, override_on_non_overriding_member
 // ignore_for_file: strict_raw_type, inference_raw_type, inference_failure_on_untyped_parameter, invalid_use_of_internal_member
-import "package:convex_dart/src/convex_dart_for_generated_code.dart";
+import "package:convex_dart/convex_dart.dart";
 ''');
 
     for (final $enum in context.enums) {
@@ -315,42 +185,9 @@ import "package:convex_dart/src/convex_dart_for_generated_code.dart";
     for (final literal in context.literals) {
       literalsBuffer.writeln(literal._literalCode);
     }
-    context.outputs[path.join('literals.dart')] = literalsBuffer.toString();
+    context.outputs[path.posix.join('literals.dart')] = literalsBuffer
+        .toString();
   }
-}
-
-sealed class BaseNode {}
-
-class TreeNode extends BaseNode {
-  final children = <String, BaseNode>{};
-  TreeNode();
-
-  String build() {
-    final buffer = StringBuffer('(\n');
-    for (final child in children.entries) {
-      switch (child.value) {
-        case TreeNode treeNode:
-          buffer.write('${child.key.camelCase}: ${treeNode.build()},\n');
-
-        case LeafNode(:final function):
-          buffer.write(
-            '${function.function.functionName}: ${function.prefix}.${function.function.functionName},\n',
-          );
-          if (function.streamFunctionName != null) {
-            buffer.write(
-              '${function.streamFunctionName}:  ${function.prefix}.${function.streamFunctionName},\n',
-            );
-          }
-      }
-    }
-    buffer.write(')');
-    return buffer.toString();
-  }
-}
-
-class LeafNode extends BaseNode {
-  final BuiltFunctionSpec function;
-  LeafNode(this.function);
 }
 
 @MappableEnum(mode: ValuesMode.named)
@@ -496,9 +333,20 @@ class FunctionSpec extends BaseFunctionSpec with FunctionSpecMappable {
     return parts;
   }
 
+  List<String> get modulePathParts {
+    final parts = convexFunctionIdentifier.split(':').first.split('/');
+    final moduleName = parts.removeLast();
+    parts.add('$moduleName.dart');
+    return parts;
+  }
+
   String get functionName {
     return identifier.split(':').last;
   }
+
+  String get dartFunctionName => stringToDart(functionName).camelCase;
+
+  String get className => stringToDart(functionName).pascalCase;
 
   String get convexFunctionIdentifier {
     // folder/file.ts:fnName
@@ -508,12 +356,12 @@ class FunctionSpec extends BaseFunctionSpec with FunctionSpecMappable {
 
   // The name of the typedef for the arguments
   // e.g. "MyFunctionArgs or void"
-  String? get argsTypeName {
+  String get argsTypeName {
     switch (args) {
       case JsAny():
-        return null;
+        return 'Null';
       case JsObject():
-        return '${functionName.pascalCase}Args';
+        return '${className}Args';
       default:
         throw UnimplementedError(
           'Unsupported argument type: ${args.type} for the function $functionName.',
@@ -521,28 +369,27 @@ class FunctionSpec extends BaseFunctionSpec with FunctionSpecMappable {
     }
   }
 
-  String get returnsTypeName => '${functionName.pascalCase}Response';
+  String get returnsTypeName => '${className}Return';
 
   void build(FunctionBuildContext context, {required bool publicSerialize}) {
-    final serializeMethodName = publicSerialize ? 'serialize' : '_serialize';
-    final deserializeMethodName = publicSerialize
-        ? 'deserialize'
-        : '_deserialize';
+    if (context.headerBuffer.isEmpty) {
+      final importPathPrefix = List.generate(
+        modulePathParts.length,
+        (index) => '..',
+      ).join('/');
 
-    final importPathPrefix = List.generate(
-      pathParts.length,
-      (index) => '..',
-    ).join('/');
-
-    context.headerBuffer.write('''
+      context.headerBuffer.write('''
 // ignore_for_file: type=lint, unused_import, unnecessary_question_mark, dead_code, dead_null_aware_expression
 // ignore_for_file: unused_element, unnecessary_cast, override_on_non_overriding_member
 // ignore_for_file: strict_raw_type, inference_failure_on_untyped_parameter, invalid_use_of_internal_member
-import "package:convex_dart/src/convex_dart_for_generated_code.dart";
 import "dart:typed_data";
+import "package:convex_dart/convex_dart.dart";
+import "package:convex_dart/src/optional.dart";
+import "package:convex_dart/src/union.dart";
 import "$importPathPrefix/schema.dart";
 import "$importPathPrefix/literals.dart";
 ''');
+    }
 
     switch (args) {
       case JsAny():
@@ -558,80 +405,62 @@ import "$importPathPrefix/literals.dart";
         );
     }
 
-    final JsObject returnsObject = switch (returns) {
-      JsObject obj => obj,
-      _ => JsObject({'body': JsField(returns, false)}, 'object'),
-    };
     context.typedefBuffer.write(
-      'typedef $returnsTypeName = ${returnsObject.dartType(context)};',
+      'typedef $returnsTypeName = ${returns.dartType(context)};',
     );
 
-    final opperationType = switch (functionType) {
-      'Query' => 'query',
-      'Mutation' => 'mutation',
-      'Action' => 'action',
+    final baseClass = switch (functionType) {
+      'Query' => 'ConvexQuery',
+      'Mutation' => 'ConvexMutation',
+      'Action' => 'ConvexAction',
       _ => throw UnimplementedError('Unsupported function type: $functionType'),
     };
 
-    context.functionBuffer.writeln('''
-Future<$returnsTypeName> $functionName(${argsTypeName != null ? "$argsTypeName args" : ""}) async {
-  ${switch (argsTypeName) {
-      String() => "final serializedArgs = $serializeMethodName(args);",
-      null => "final serializedArgs = $serializeMethodName(null);",
-    }}
-  final response = await InternalConvexClient.instance.$opperationType(name: '$convexFunctionIdentifier', args: serializedArgs);
-  final deserializedResponse = $deserializeMethodName(response);
-  return deserializedResponse;
-}
-''');
-
-    if (functionType == 'Query') {
-      context.functionBuffer.writeln("""
-Stream<$returnsTypeName> ${functionName}Stream(${argsTypeName != null ? "$argsTypeName args" : ""}) {
- ${switch (argsTypeName) {
-        String() => "final serializedArgs = $serializeMethodName(args);",
-        null => "final serializedArgs = $serializeMethodName(null);",
-      }}
-  return InternalConvexClient.instance.stream(
-    name: '$convexFunctionIdentifier', 
-    args: serializedArgs,
-    decodeResult: $deserializeMethodName,
-  );
-}
-""");
-    }
-
-    String serializeCode;
+    final String argsToRawCode;
     if (args is JsAny) {
-      serializeCode = '{}';
+      argsToRawCode = '<String, Object?>{}';
     } else {
       context.resetTempNames();
-      serializeCode = args.serialize(context, 'args', nullable: false);
-      // Remove the "encodeValue(" and ")"
-      serializeCode = serializeCode.substring(12, serializeCode.length - 1);
+      argsToRawCode = args.serialize(context, 'args', nullable: false);
     }
 
     context.resetTempNames();
-    String deserializeCode = returns.deserialize(
+    final argsFromRawCode = switch (args) {
+      JsAny() => 'null',
+      JsObject obj => obj.deserialize(context, 'rawArgs', nullable: false),
+      _ => throw ArgumentError(
+        'Function arguments must be either JsAny (for dynamic/any type) or JsObject (for structured object types). '
+        'Found: ${args.type} for the function $functionName.',
+      ),
+    };
+
+    context.resetTempNames();
+    final returnsFromRawCode = returns.deserialize(
       context,
-      'decodeValue(map)',
+      'returns',
       nullable: false,
     );
-    if (returns is! JsObject) {
-      deserializeCode = '(body: $deserializeCode)';
-    }
 
-    context.functionBuffer.writeln("""
-@pragma("vm:prefer-inline")
-ConvexArgs $serializeMethodName(${argsTypeName ?? "void"} args) {
-  return encodeArgs($serializeCode);
-}
-
-""");
     context.functionBuffer.writeln('''
-@pragma("vm:prefer-inline")
-$returnsTypeName $deserializeMethodName(ConvexValue map) {
-  return $deserializeCode;
+final $dartFunctionName = $className();
+
+class $className extends $baseClass<$argsTypeName, $returnsTypeName> {
+  $className() : super("$convexFunctionIdentifier");
+
+  @override
+  Map<String, Object?> parseArgs($argsTypeName args) {
+    return $argsToRawCode;
+  }
+
+  @override
+  $argsTypeName parseArgsFromRaw(Map<String, Object?> rawArgs) {
+    return $argsFromRawCode;
+  }
+
+  @override
+  $returnsTypeName parseReturns(Object? returns) {
+    return $returnsFromRawCode;
+  }
 }
 ''');
   }
@@ -673,13 +502,13 @@ sealed class JsType with JsTypeMappable {
 class JsAny extends JsType with JsAnyMappable {
   const JsAny(super.type);
   @override
-  String dartType(FunctionBuildContext context) => 'dynamic';
+  String dartType(FunctionBuildContext context) => 'Object?';
   @override
   String serialize(
     FunctionBuildContext context,
     String name, {
     required bool nullable,
-  }) => 'encodeValue($name)';
+  }) => name;
 
   @override
   String deserialize(
@@ -687,7 +516,7 @@ class JsAny extends JsType with JsAnyMappable {
     String name, {
     required bool nullable,
   }) {
-    return '($name as dynamic)';
+    return name;
   }
 }
 
@@ -701,15 +530,17 @@ class JsBoolean extends JsType with JsBooleanMappable {
     FunctionBuildContext context,
     String name, {
     required bool nullable,
-  }) => 'encodeValue($name)';
+  }) => name;
   @override
   String deserialize(
     FunctionBuildContext context,
     String name, {
     required bool nullable,
   }) {
-    final suffix = nullable ? '?' : '';
-    return '($name as bool$suffix)';
+    if (nullable) {
+      return '$name == null ? null : ($name as bool)';
+    }
+    return '($name as bool)';
   }
 }
 
@@ -723,15 +554,17 @@ class JsString extends JsType with JsStringMappable {
     FunctionBuildContext context,
     String name, {
     required bool nullable,
-  }) => 'encodeValue($name)';
+  }) => name;
   @override
   String deserialize(
     FunctionBuildContext context,
     String name, {
     required bool nullable,
   }) {
-    final suffix = nullable ? '?' : '';
-    return '($name as String$suffix)';
+    if (nullable) {
+      return '$name == null ? null : ($name as String)';
+    }
+    return '($name as String)';
   }
 }
 
@@ -745,15 +578,17 @@ class JsNumber extends JsType with JsNumberMappable {
     FunctionBuildContext context,
     String name, {
     required bool nullable,
-  }) => 'encodeValue($name)';
+  }) => name;
   @override
   String deserialize(
     FunctionBuildContext context,
     String name, {
     required bool nullable,
   }) {
-    final suffix = nullable ? '?' : '';
-    return '($name as double$suffix)';
+    if (nullable) {
+      return '$name == null ? null : ($name as num).toDouble()';
+    }
+    return '($name as num).toDouble()';
   }
 }
 
@@ -761,7 +596,7 @@ class JsNumber extends JsType with JsNumberMappable {
 class JsNull extends JsType with JsNullMappable {
   const JsNull(super.type);
   @override
-  String dartType(FunctionBuildContext context) => 'void';
+  String dartType(FunctionBuildContext context) => 'Null';
   @override
   String serialize(
     FunctionBuildContext context,
@@ -782,21 +617,23 @@ class JsNull extends JsType with JsNullMappable {
 class JsBigInt extends JsType with JsBigIntMappable {
   const JsBigInt(super.type);
   @override
-  String dartType(FunctionBuildContext context) => 'int';
+  String dartType(FunctionBuildContext context) => 'BigInt';
   @override
   String serialize(
     FunctionBuildContext context,
     String name, {
     required bool nullable,
-  }) => 'encodeValue($name)';
+  }) => name;
   @override
   String deserialize(
     FunctionBuildContext context,
     String name, {
     required bool nullable,
   }) {
-    final suffix = nullable ? '?' : '';
-    return '($name as int$suffix)';
+    if (nullable) {
+      return '$name == null ? null : ($name as BigInt)';
+    }
+    return '($name as BigInt)';
   }
 }
 
@@ -804,21 +641,23 @@ class JsBigInt extends JsType with JsBigIntMappable {
 class JsBytes extends JsType with JsBytesMappable {
   const JsBytes(super.type);
   @override
-  String dartType(FunctionBuildContext context) => 'Uint8ListWithEquality';
+  String dartType(FunctionBuildContext context) => 'Uint8List';
   @override
   String serialize(
     FunctionBuildContext context,
     String name, {
     required bool nullable,
-  }) => 'encodeValue($name)';
+  }) => name;
   @override
   String deserialize(
     FunctionBuildContext context,
     String name, {
     required bool nullable,
   }) {
-    final suffix = nullable ? '?' : '';
-    return '($name as Uint8ListWithEquality$suffix)';
+    if (nullable) {
+      return '$name == null ? null : ($name as Uint8List)';
+    }
+    return '($name as Uint8List)';
   }
 }
 
@@ -911,7 +750,13 @@ class $literalTypeName implements Literal {
     FunctionBuildContext context,
     String name, {
     required bool nullable,
-  }) => 'encodeValue($name)';
+  }) {
+    if (nullable) {
+      return '$name == null ? null : $name!.value';
+    }
+    return '$name.value';
+  }
+
   @override
   String deserialize(
     FunctionBuildContext context,
@@ -1040,8 +885,10 @@ static $enumName fromValue(Object value) {
     required bool nullable,
   }) {
     nullable = nullable || this.nullable;
-    final dot = nullable ? '?.' : '.';
-    return 'encodeValue($name${dot}value)';
+    if (nullable) {
+      return '$name == null ? null : $name!.value.value';
+    }
+    return '$name.value.value';
   }
 
   @override
@@ -1051,9 +898,9 @@ static $enumName fromValue(Object value) {
     required bool nullable,
   }) {
     if (this.nullable || nullable) {
-      return '$name == null ? null : $enumName.fromValue($name)';
+      return '$name == null ? null : $enumName.fromValue($name as Object)';
     } else {
-      return '$enumName.fromValue($name)';
+      return '$enumName.fromValue($name as Object)';
     }
   }
 }
@@ -1082,12 +929,13 @@ class _ObjectsUnion extends _BaseUnion {
     for (final type in types) {
       final argName = context.tempNames.next();
       ons.add(
-        '($argName) => ${type.serialize(context, argName, nullable: nullable)}',
+        '($argName) => ${type.serialize(context, argName, nullable: false)}',
       );
     }
-    final dot = nullable ? '?.' : '.';
-
-    return "encodeValue($name${dot}split(${ons.join(", ")}))";
+    if (nullable) {
+      return "$name == null ? null : $name!.split(${ons.join(", ")})";
+    }
+    return "$name.split(${ons.join(", ")})";
   }
 
   @override
@@ -1097,31 +945,25 @@ class _ObjectsUnion extends _BaseUnion {
     required bool nullable,
   }) {
     nullable = nullable || this.nullable;
-    final dot = nullable ? '?.' : '.';
-
     String type =
         "Union${types.length}<${types.map((e) => e.dartType(context)).join(', ')}>";
     final fnBuffer = StringBuffer();
     for (final type in types) {
       fnBuffer.writeln('''
 try{
-  return ${type.deserialize(context, name, nullable: nullable)};
+  return ${type.deserialize(context, name, nullable: false)};
 } catch(e){}
 ''');
     }
-    if (nullable) {
-      fnBuffer.writeln('''
-if ($name == null){
-  return null;
-}
-''');
-    }
     fnBuffer.writeln('''
-throw Exception(($name${dot}toString() ?? "null") + r" cannot be deserialized into a $type");
+throw Exception(($name.toString()) + r" cannot be deserialized into a $type");
 ''');
 
-    type = '''$type((){$fnBuffer}())''';
-    return type;
+    final union = '''$type((){$fnBuffer}())''';
+    if (nullable) {
+      return '$name == null ? null : $union';
+    }
+    return union;
   }
 }
 
@@ -1210,7 +1052,7 @@ class JsRecord extends JsType with JsRecordMappable {
         'Record keys must be a string. If you are seeing this and are having trouble, please file an issue on GitHub.',
       );
     }
-    return 'IMap<String, ${values.dartType(context)}>';
+    return 'Map<String, ${values.dartType(context)}>';
   }
 
   @override
@@ -1219,9 +1061,13 @@ class JsRecord extends JsType with JsRecordMappable {
     String name, {
     required bool nullable,
   }) {
-    final dot = nullable ? '?.' : '.';
     final argName = context.tempNames.next();
-    return "encodeValue({for (final $argName in $name${dot}entries) $argName${dot}key: encodeValue(${values.fieldType.serialize(context, "$argName${dot}value", nullable: nullable)})})";
+    final map =
+        "{for (final $argName in $name.entries) $argName.key: ${values.fieldType.serialize(context, "$argName.value", nullable: false)}}";
+    if (nullable) {
+      return '$name == null ? null : $map';
+    }
+    return map;
   }
 
   @override
@@ -1230,11 +1076,14 @@ class JsRecord extends JsType with JsRecordMappable {
     String name, {
     required bool nullable,
   }) {
-    final suffix = nullable ? '?' : '';
-    final dot = nullable ? '?.' : '.';
     final keyArgName = context.tempNames.next();
     final valueArgName = context.tempNames.next();
-    return '($name as IMap<String, dynamic>$suffix)${dot}map(($keyArgName, $valueArgName) => MapEntry( $keyArgName, ${values.fieldType.deserialize(context, valueArgName, nullable: nullable)}))';
+    final map =
+        '($name as Map).cast<String, Object?>().map(($keyArgName, $valueArgName) => MapEntry($keyArgName, ${values.fieldType.deserialize(context, valueArgName, nullable: false)}))';
+    if (nullable) {
+      return '$name == null ? null : $map';
+    }
+    return map;
   }
 }
 
@@ -1275,21 +1124,26 @@ class JsObject extends JsType with JsObjectMappable {
     String name, {
     required bool nullable,
   }) {
-    final dot = nullable ? '?.' : '.';
+    final objectName = context.tempNames.next();
     final buffer = StringBuffer('{');
     for (final entry in value.entries) {
       if (entry.value.optional) {
+        final fieldName = '$objectName.${safeDartKey(entry.key)}';
         buffer.write(
-          "if ($name$dot${safeDartKey(entry.key)}${dot}isDefined) '${entry.key}': ${entry.value.fieldType.serialize(context, "$name$dot${safeDartKey(entry.key)}${dot}asDefined()${dot}value", nullable: nullable)},",
+          "if ($fieldName.isDefined) '${entry.key}': ${entry.value.fieldType.serialize(context, "$fieldName.asDefined().value", nullable: false)},",
         );
       } else {
         buffer.write(
-          "'${entry.key}': ${entry.value.fieldType.serialize(context, "$name$dot${safeDartKey(entry.key)}", nullable: nullable)},",
+          "'${entry.key}': ${entry.value.fieldType.serialize(context, "$objectName.${safeDartKey(entry.key)}", nullable: false)},",
         );
       }
     }
     buffer.write('}');
-    return 'encodeValue($buffer)';
+    final object = '((){ final $objectName = $name; return $buffer; })()';
+    if (nullable) {
+      return '$name == null ? null : $object';
+    }
+    return object;
   }
 
   @override
@@ -1298,16 +1152,14 @@ class JsObject extends JsType with JsObjectMappable {
     String name, {
     required bool nullable,
   }) {
-    final suffix = nullable ? '?' : '';
-    final dot = nullable ? '?.' : '.';
     final argName = context.tempNames.next();
     final buffer = StringBuffer(
-      '($name as IMap<String, dynamic>$suffix)${dot}then(($argName) => (',
+      '((){ final $argName = ($name as Map).cast<String, Object?>(); return (',
     );
     for (final entry in value.entries) {
       if (entry.value.optional) {
         buffer.write(
-          "${safeDartKey(entry.key)}: $argName${dot}containsKey('${entry.key}') ? Defined<${entry.value.fieldType.dartType(context)}>(${entry.value.fieldType.deserialize(context, "$argName['${entry.key}']", nullable: false)}) : Undefined<${entry.value.fieldType.dartType(context)}>(),",
+          "${safeDartKey(entry.key)}: $argName.containsKey('${entry.key}') ? Defined<${entry.value.fieldType.dartType(context)}>(${entry.value.fieldType.deserialize(context, "$argName['${entry.key}']", nullable: false)}) : Undefined<${entry.value.fieldType.dartType(context)}>(),",
         );
       } else {
         buffer.write(
@@ -1315,8 +1167,12 @@ class JsObject extends JsType with JsObjectMappable {
         );
       }
     }
-    buffer.write('))');
-    return buffer.toString();
+    buffer.write('); })()');
+    final object = buffer.toString();
+    if (nullable) {
+      return '$name == null ? null : $object';
+    }
+    return object;
   }
 }
 
@@ -1326,7 +1182,7 @@ class JsArray extends JsType with JsArrayMappable {
   const JsArray(this.value, super.type);
   @override
   String dartType(FunctionBuildContext context) {
-    return 'IList<${value.dartType(context)}>';
+    return 'List<${value.dartType(context)}>';
   }
 
   @override
@@ -1335,9 +1191,13 @@ class JsArray extends JsType with JsArrayMappable {
     String name, {
     required bool nullable,
   }) {
-    final dot = nullable ? '?.' : '.';
     final argName = context.tempNames.next();
-    return 'encodeValue($name${dot}map(($argName) => ${value.serialize(context, argName, nullable: nullable)})${dot}toIList())';
+    final list =
+        '$name.map<Object?>(($argName) => ${value.serialize(context, argName, nullable: false)}).toList(growable: false)';
+    if (nullable) {
+      return '$name == null ? null : $list';
+    }
+    return list;
   }
 
   @override
@@ -1346,10 +1206,13 @@ class JsArray extends JsType with JsArrayMappable {
     String name, {
     required bool nullable,
   }) {
-    final suffix = nullable ? '?' : '';
-    final dot = nullable ? '?.' : '.';
     final randName = context.tempNames.next();
-    return '($name as IList<dynamic>$suffix)${dot}map(($randName) => ${value.deserialize(context, randName, nullable: nullable)})${dot}toIList()';
+    final list =
+        '($name as List).map<${value.dartType(context)}>(($randName) => ${value.deserialize(context, randName, nullable: false)}).toList(growable: false)';
+    if (nullable) {
+      return '$name == null ? null : $list';
+    }
+    return list;
   }
 }
 
@@ -1372,7 +1235,10 @@ class ConvexId extends JsType with ConvexIdMappable {
     String name, {
     required bool nullable,
   }) {
-    return 'encodeValue($name)';
+    if (nullable) {
+      return '$name == null ? null : $name!.name';
+    }
+    return '$name.name';
   }
 
   @override
