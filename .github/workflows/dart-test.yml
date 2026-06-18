@@ -23,13 +23,15 @@ jobs:
         with:
           node-version: 20
           cache: npm
-          cache-dependency-path: packages/convex_dart/convex-test/package-lock.json
+          cache-dependency-path: |
+            packages/convex_dart/convex-test/package-lock.json
+            packages/example/package-lock.json
 
       - run: dart pub get
 
-      - run: dart format --set-exit-if-changed packages/convex_dart packages/convex_dart_cli
+      - run: dart format --set-exit-if-changed packages/convex_dart packages/convex_dart_cli packages/example
 
-      - run: dart analyze packages/convex_dart packages/convex_dart_cli
+      - run: dart analyze packages/convex_dart packages/convex_dart_cli packages/example
 
       - run: dart test --exclude-tags integration packages/convex_dart/test packages/convex_dart_cli/test
 
@@ -44,3 +46,14 @@ jobs:
       - run: dart test packages/convex_dart/test/integration/
 
       - run: dart test packages/convex_dart_cli/test/integration/
+
+      - name: Deploy example backend
+        working-directory: packages/example
+        env:
+          CONVEX_DEPLOY_KEY: ${{ secrets.EXAMPLE_CONVEX_DEPLOY_KEY }}
+          CONVEX_URL: https://dependable-wolf-352.convex.cloud
+        run: |
+          npm ci
+          npx convex deploy
+
+      - run: dart test packages/example/test
