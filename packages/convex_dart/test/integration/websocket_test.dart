@@ -4,7 +4,7 @@ library;
 import 'dart:async';
 import 'dart:io';
 
-import 'package:convex_dart/browser.dart';
+import 'package:convex_dart/src/browser.dart';
 import 'package:test/test.dart';
 
 import 'helpers.dart';
@@ -55,7 +55,7 @@ void main() {
       }, () => updates.add(handle.getCurrentValue()));
 
       await retry(
-        () => client.mutation('integration:increment', {'name': name}),
+        () => client.rawMutation('integration:increment', {'name': name}),
       );
 
       await retry(() async {

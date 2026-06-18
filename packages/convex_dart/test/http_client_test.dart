@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
-import 'package:convex_dart/browser.dart';
+import 'package:convex_dart/src/browser.dart';
 import 'package:convex_dart/src/browser/logging.dart';
 import 'package:http/http.dart' as http;
 import 'package:test/test.dart';
@@ -34,7 +34,7 @@ void main() {
         options: ConvexHttpClientOptions(httpClient: fake, auth: 'token'),
       );
 
-      expect(await client.query('messages:list', {'n': BigInt.one}), 2.5);
+      expect(await client.rawQuery('messages:list', {'n': BigInt.one}), 2.5);
     });
 
     test('queues mutations by default', () async {
@@ -55,8 +55,8 @@ void main() {
         options: ConvexHttpClientOptions(httpClient: fake),
       );
 
-      final first = client.mutation('first');
-      final second = client.mutation('second');
+      final first = client.rawMutation('first', {});
+      final second = client.rawMutation('second', {});
       await Future<void>.delayed(Duration.zero);
       expect(seen, ['first']);
       gate.complete();
@@ -82,12 +82,12 @@ void main() {
         'https://x.convex.cloud',
         options: ConvexHttpClientOptions(httpClient: fake),
       );
-      final first = client.mutation(
+      final first = client.rawMutation(
         'first',
         null,
         const HttpMutationOptions(skipQueue: true),
       );
-      final second = client.mutation(
+      final second = client.rawMutation(
         'second',
         null,
         const HttpMutationOptions(skipQueue: true),
@@ -112,7 +112,7 @@ void main() {
         options: ConvexHttpClientOptions(httpClient: fake),
       );
 
-      expect(await client.action('doThing'), BigInt.one);
+      expect(await client.rawAction('doThing', {}), BigInt.one);
     });
 
     test('setAuth and clearAuth update Authorization header', () async {
@@ -130,10 +130,10 @@ void main() {
         options: ConvexHttpClientOptions(httpClient: fake),
       );
       client.setAuth('token-1');
-      await client.query('q');
+      await client.rawQuery('q', {});
       expect(authHeader, 'Bearer token-1');
       client.clearAuth();
-      await client.query('q');
+      await client.rawQuery('q', {});
       expect(authHeader, isNull);
     });
 
@@ -152,7 +152,7 @@ void main() {
         options: ConvexHttpClientOptions(httpClient: fake),
       );
       client.setAuth(' token-1 ');
-      await client.query('q');
+      await client.rawQuery('q', {});
       expect(authHeader, 'Bearer  token-1 ');
     });
 
@@ -171,7 +171,7 @@ void main() {
         options: ConvexHttpClientOptions(httpClient: fake),
       );
       client.setAdminAuth('admin-key');
-      await client.query('q');
+      await client.rawQuery('q', {});
       expect(authHeader, 'Convex admin-key');
     });
 
@@ -198,53 +198,16 @@ void main() {
         options: ConvexHttpClientOptions(httpClient: fake, logger: logger),
       );
 
-      await client.query('logged');
+      await client.rawQuery('logged', {});
       expect(logger.logs, [
         ['[query:logged] line'],
       ]);
 
       client.setDebug(false);
-      await client.query('quiet');
+      await client.rawQuery('quiet', {});
       expect(logger.logs, [
         ['[query:logged] line'],
       ]);
-    });
-
-    test('consistentQuery reuses timestamp and calls query_at_ts', () async {
-      var timestampRequests = 0;
-      final fake = FakeHttpClient((request) async {
-        if (request.url.path == '/api/query_ts') {
-          timestampRequests++;
-          expect(request.body, isEmpty);
-          return jsonResponse({'ts': 'encoded-ts'});
-        }
-        expect(
-          request.url.toString(),
-          'https://x.convex.cloud/api/query_at_ts',
-        );
-        expect(jsonDecode(request.body), {
-          'path': 'messages:list',
-          'format': 'convex_encoded_json',
-          'args': [
-            {'channel': 'general'},
-          ],
-          'ts': 'encoded-ts',
-        });
-        return jsonResponse({
-          'status': 'success',
-          'value': null,
-          'logLines': [],
-        });
-      });
-      final client = ConvexHttpClient(
-        'https://x.convex.cloud',
-        options: ConvexHttpClientOptions(httpClient: fake),
-      );
-
-      await client.consistentQuery('messages:list', {'channel': 'general'});
-      await client.consistentQuery('messages:list', {'channel': 'general'});
-
-      expect(timestampRequests, 1);
     });
 
     test(
@@ -270,7 +233,7 @@ void main() {
         );
 
         expect(
-          await client.function(
+          await client.rawFunction(
             'messages:list',
             componentPath: 'component',
             args: {'channel': 'general'},
@@ -295,7 +258,7 @@ void main() {
       );
 
       await expectLater(
-        client.query('broken'),
+        client.rawQuery('broken', {}),
         throwsA(
           isA<ConvexError<Object?>>()
               .having((e) => e.message, 'message', 'boom')
@@ -313,7 +276,7 @@ void main() {
         options: ConvexHttpClientOptions(httpClient: fake),
       );
 
-      await expectLater(client.query('broken'), throwsStateError);
+      await expectLater(client.rawQuery('broken', {}), throwsStateError);
     });
 
     test('concurrent queries complete independently', () async {
@@ -330,7 +293,10 @@ void main() {
         'https://x.convex.cloud',
         options: ConvexHttpClientOptions(httpClient: fake),
       );
-      final results = await Future.wait([client.query('a'), client.query('b')]);
+      final results = await Future.wait([
+        client.rawQuery('a', {}),
+        client.rawQuery('b', {}),
+      ]);
       expect(results, [1, 2]);
     });
   });

@@ -1,13 +1,12 @@
 import 'dart:async';
 
+import 'package:convex_dart/src/browser.dart';
+
 import '../../common/index.dart';
-import '../../values/errors.dart';
-import '../../values/value.dart';
 import '../logging.dart';
 import 'authentication_manager.dart';
 import 'function_result.dart';
 import 'local_state.dart';
-import 'optimistic_updates.dart';
 import 'optimistic_updates_impl.dart';
 import 'protocol.dart';
 import 'remote_query_set.dart';
@@ -407,7 +406,7 @@ class BaseConvexClient {
     Map<String, Object?>? args,
     MutationOptions options = const MutationOptions(),
   ]) async {
-    final result = await mutationInternal(name, args, options);
+    final result = await _mutationInternal(name, args, options);
     if (result['success'] != true) {
       if (result.containsKey('errorData')) {
         throw ConvexError<Object?>(
@@ -420,7 +419,7 @@ class BaseConvexClient {
     return result['value'];
   }
 
-  Future<FunctionResult> mutationInternal(
+  Future<FunctionResult> _mutationInternal(
     String udfPath, [
     Map<String, Object?>? args,
     MutationOptions options = const MutationOptions(),
@@ -480,7 +479,7 @@ class BaseConvexClient {
   /// [name] is the name of the action. [args] are the action arguments; if
   /// omitted, the arguments default to `{}`.
   Future<Object?> action(String name, [Map<String, Object?>? args]) async {
-    final result = await actionInternal(name, args);
+    final result = await _actionInternal(name, args);
     if (result['success'] != true) {
       if (result.containsKey('errorData')) {
         throw ConvexError<Object?>(
@@ -493,7 +492,7 @@ class BaseConvexClient {
     return result['value'];
   }
 
-  Future<FunctionResult> actionInternal(
+  Future<FunctionResult> _actionInternal(
     String udfPath, [
     Map<String, Object?>? args,
     String? componentPath,

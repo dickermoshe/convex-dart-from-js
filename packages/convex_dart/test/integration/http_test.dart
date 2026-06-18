@@ -3,7 +3,7 @@ library;
 
 import 'dart:io';
 
-import 'package:convex_dart/browser.dart';
+import 'package:convex_dart/src/browser.dart';
 import 'package:test/test.dart';
 
 import 'helpers.dart';
@@ -28,14 +28,14 @@ void main() {
 
     test('echo query returns args', () async {
       final result = await retry(
-        () => client.query('integration:echo', {'message': 'hi'}),
+        () => client.rawQuery('integration:echo', {'message': 'hi'}),
       );
       expect(result, {'message': 'hi'});
     });
 
     test('types query returns Convex value types', () async {
       final result =
-          await retry(() => client.query('integration:types')) as Map;
+          await retry(() => client.rawQuery('integration:types', {})) as Map;
       expect(result['int64'], BigInt.from(42));
       expect(result['nested'], {'a': 'x'});
     });
@@ -43,10 +43,10 @@ void main() {
     test('mutation increments counter', () async {
       const name = 'dart-integration-http';
       await retry(
-        () => client.mutation('integration:increment', {'name': name}),
+        () => client.rawMutation('integration:increment', {'name': name}),
       );
       final value = await retry(
-        () => client.query('integration:getCounter', {'name': name}),
+        () => client.rawQuery('integration:getCounter', {'name': name}),
       );
       expect(value, isA<BigInt>());
       expect((value as BigInt) >= BigInt.one, isTrue);
@@ -54,14 +54,14 @@ void main() {
 
     test('action doubles input', () async {
       final result = await retry(
-        () => client.action('integration:compute', {'x': 3.0}),
+        () => client.rawAction('integration:compute', {'x': 3.0}),
       );
       expect(result, 6.0);
     });
 
     test('throws ConvexError with data', () async {
       await expectLater(
-        retry(() => client.query('integration:throws')),
+        retry(() => client.rawQuery('integration:throws', {})),
         throwsA(
           isA<ConvexError<Object?>>()
               .having((e) => e.message, 'message', isNotEmpty)
@@ -80,7 +80,7 @@ void main() {
         );
         addTearDown(authed.close);
         final result = await retry(
-          () => authed.query('integration:authRequired'),
+          () => authed.rawQuery('integration:authRequired', {}),
         );
         expect(result, isA<String>());
         expect((result as String).isNotEmpty, isTrue);

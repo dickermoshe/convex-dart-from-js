@@ -41,7 +41,7 @@ class Unsubscribe<T> {
 /// Subscribes to Convex query functions and executes mutations and actions
 /// over a WebSocket.
 ///
-/// Optimistic updates for mutations are supported via [mutation].
+/// Optimistic updates for mutations are supported via [rawMutation].
 /// Third-party clients may choose to wrap [BaseConvexClient] for additional
 /// control.
 class ConvexClient {
@@ -139,7 +139,7 @@ class ConvexClient {
   /// [mutation] is the name of the mutation. [args] are the mutation arguments.
   /// [optimisticUpdate] optionally applies a local update while the mutation
   /// is pending.
-  Future<Object?> mutation(
+  Future<Object?> rawMutation(
     String mutation,
     Map<String, Object?> args, {
     OptimisticUpdate? optimisticUpdate,
@@ -152,14 +152,14 @@ class ConvexClient {
   /// Executes an action function.
   ///
   /// [action] is the name of the action. [args] are the action arguments.
-  Future<Object?> action(String action, Map<String, Object?> args) =>
+  Future<Object?> rawAction(String action, Map<String, Object?> args) =>
       _client.action(action, args);
 
   /// Fetches a query result once from local state.
   ///
   /// Returns a cached result only if the client is already subscribed to the
   /// query or has an optimistic value.
-  Future<Object?> query(String query, Map<String, Object?> args) async =>
+  Future<Object?> rawQuery(String query, Map<String, Object?> args) async =>
       _client.localQueryResult(query, args);
 
   void _transition(List<QueryToken> updatedQueries) {

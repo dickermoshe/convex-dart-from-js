@@ -1,4 +1,4 @@
-import 'package:convex_dart/browser.dart';
+import 'package:convex_dart/src/browser.dart';
 import 'package:test/test.dart';
 
 import 'support/fake_socket.dart';
@@ -70,7 +70,7 @@ void main() {
       socket.message(
         transitionJson(startQuerySet: 0, endQuerySet: 1, modifications: []),
       );
-      final mutation = client.mutation('send', {});
+      final mutation = client.rawMutation('send', {});
       final msg = sentMessage(socket.sent, socket.sent.length - 1);
       socket.message(
         mutationResponseJson(

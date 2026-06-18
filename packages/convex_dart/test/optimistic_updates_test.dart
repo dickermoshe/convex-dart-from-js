@@ -1,4 +1,4 @@
-import 'package:convex_dart/browser.dart';
+import 'package:convex_dart/src/browser.dart';
 import 'package:convex_dart/src/browser/sync/function_result.dart';
 import 'package:convex_dart/src/browser/sync/optimistic_updates_impl.dart';
 import 'package:convex_dart/src/browser/sync/udf_path_utils.dart';

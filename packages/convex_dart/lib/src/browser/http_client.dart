@@ -22,7 +22,7 @@ const statusCodeUdfFailed = 560;
 /// Client version string sent in the `Convex-Client` header.
 const convexClientVersion = 'npm-1.41.0';
 
-/// Options for [ConvexHttpClient.mutation].
+/// Options for [ConvexHttpClient.rawMutation].
 class HttpMutationOptions {
   /// Creates mutation options.
   const HttpMutationOptions({this.skipQueue = false});
@@ -94,7 +94,6 @@ class ConvexHttpClient {
   final Logger _logger;
   String? _auth;
   String? _adminAuth;
-  Future<String>? _encodedTsFuture;
   bool _debug = true;
   final List<_QueuedMutation> _mutationQueue = [];
   bool _isProcessingQueue = false;
@@ -145,47 +144,19 @@ class ConvexHttpClient {
     _debug = debug;
   }
 
-  /// Executes a Convex query at the same timestamp as every other consistent
-  /// query execution run by this HTTP client.
-  ///
-  /// This API is experimental: it may change or disappear.
-  ///
-  /// This does not make sense for long-lived [ConvexHttpClient] instances, as
-  /// Convex backends can read a limited amount into the past; beyond 30 seconds
-  /// in the past may not be available. Create a new client to use a consistent
-  /// time.
-  ///
-  /// [path] is the name of the query. [args] are the query arguments; if omitted,
-  /// the arguments default to `{}`.
-  Future<Object?> consistentQuery(
-    String path, [
-    Map<String, Object?>? args,
-  ]) async {
-    final timestamp = await _getTimestamp();
-    return _run(
-      'query',
-      path,
-      parseArgs(args),
-      endpoint: 'query_at_ts',
-      timestamp: timestamp,
-    );
-  }
-
   /// Executes a Convex query function.
   ///
-  /// [path] is the name of the query. [args] are the query arguments; if omitted,
-  /// the arguments default to `{}`.
-  Future<Object?> query(String path, [Map<String, Object?>? args]) async =>
+  /// [path] is the name of the query. [args] are the query arguments.
+  Future<Object?> rawQuery(String path, Map<String, Object?> args) async =>
       _run('query', path, parseArgs(args), endpoint: 'query');
 
   /// Executes a Convex mutation function. Mutations are queued by default.
   ///
-  /// [path] is the name of the mutation. [args] are the mutation arguments; if
-  /// omitted, the arguments default to `{}`. [options] can skip the mutation
+  /// [path] is the name of the mutation. [args] are the mutation arguments. [options] can skip the mutation
   /// queue.
-  Future<Object?> mutation(
-    String path, [
-    Map<String, Object?>? args,
+  Future<Object?> rawMutation(
+    String path,
+    Map<String, Object?>? args, [
     HttpMutationOptions options = const HttpMutationOptions(),
   ]) {
     final parsedArgs = parseArgs(args);
@@ -202,7 +173,7 @@ class ConvexHttpClient {
   ///
   /// [path] is the name of the action. [args] are the action arguments; if
   /// omitted, the arguments default to `{}`.
-  Future<Object?> action(String path, [Map<String, Object?>? args]) async =>
+  Future<Object?> rawAction(String path, Map<String, Object?> args) async =>
       _run('action', path, parseArgs(args), endpoint: 'action');
 
   /// Executes a Convex function of an unknown type. These function calls are
@@ -210,7 +181,7 @@ class ConvexHttpClient {
   ///
   /// [path] is the name of the function. [args] are the function arguments; if
   /// omitted, the arguments default to `{}`.
-  Future<Object?> function(
+  Future<Object?> rawFunction(
     String path, {
     String? componentPath,
     Map<String, Object?>? args,
@@ -225,24 +196,6 @@ class ConvexHttpClient {
 
   /// Closes the underlying HTTP client.
   void close() => _client.close();
-
-  Future<String> _getTimestamp() {
-    final existing = _encodedTsFuture;
-    if (existing != null) return existing;
-    return _encodedTsFuture = _getTimestampInner();
-  }
-
-  Future<String> _getTimestampInner() async {
-    final response = await _client.post(
-      Uri.parse('$_address/api/query_ts'),
-      headers: _baseHeaders(),
-    );
-    if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw StateError(response.body);
-    }
-    final json = jsonDecode(response.body) as Map<String, Object?>;
-    return json['ts']! as String;
-  }
 
   Future<void> _processMutationQueue() async {
     if (_isProcessingQueue) return;

@@ -1,6 +1,6 @@
 import 'dart:typed_data';
 
-import 'package:convex_dart/browser.dart';
+import 'package:convex_dart/src/browser.dart';
 import 'package:test/test.dart';
 
 void main() {
