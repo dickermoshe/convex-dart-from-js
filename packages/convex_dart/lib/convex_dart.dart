@@ -170,3 +170,13 @@ extension OptimisticLocalStoreExtention on OptimisticLocalStore {
     setRawQuery(query.path, query.parseArgs(args), value);
   }
 }
+
+/// An interface for a Convex table ID.
+abstract interface class TableId {
+  String get name;
+}
+
+/// Base class for all literal types.
+abstract interface class Literal<T> {
+  T get value;
+}
