@@ -1,16 +1,35 @@
+/// Utilities for working with values stored in Convex.
+///
+/// See the full set of supported types at
+/// [Types](https://docs.convex.dev/using/types).
+library;
+
 import 'dart:convert';
 import 'dart:typed_data';
 
 import 'base64.dart' as base64;
 
+/// A JSON-serializable value.
 typedef JSONValue = Object?;
+
+/// A value supported by Convex.
+///
+/// Values can be stored in documents and used as arguments and return types to
+/// Convex functions. See [Types](https://docs.convex.dev/using/types).
 typedef Value = Object?;
+
+/// The types of [Value] that can represent numbers.
 typedef NumericValue = Object;
 
 const _minInt64 = -9223372036854775808;
 const _maxInt64 = 9223372036854775807;
+
+/// Minimum 64-bit signed integer representable in Convex.
 final BigInt minInt64 = BigInt.from(_minInt64);
+
+/// Maximum 64-bit signed integer representable in Convex.
 final BigInt maxInt64 = BigInt.from(_maxInt64);
+
 final BigInt _twoTo63 = BigInt.one << 63;
 final BigInt _twoTo64 = BigInt.one << 64;
 const _maxIdentifierLen = 1024;
@@ -22,6 +41,7 @@ final class ConvexUndefined {
   String toString() => 'undefined';
 }
 
+/// Sentinel value representing JavaScript `undefined` in optional object fields.
 const convexUndefined = ConvexUndefined();
 
 bool _isSpecial(double n) =>
@@ -81,6 +101,7 @@ double _doubleFromBase64(String encoded) {
   return ByteData.sublistView(bytes).getFloat64(0, Endian.little);
 }
 
+/// Validates that [key] is a legal Convex object field name.
 void validateObjectField(String key) {
   if (key.length > _maxIdentifierLen) {
     throw ArgumentError(
@@ -102,6 +123,7 @@ void validateObjectField(String key) {
   }
 }
 
+/// Converts Convex JSON wire format into Dart [Value] objects.
 Object? jsonToConvex(Object? value) {
   if (value == null || value is bool || value is String) {
     return value;
@@ -266,6 +288,7 @@ Object? _convexToJsonInternal(
   );
 }
 
+/// Converts a Dart [Value] into Convex JSON wire format.
 Object? convexToJson(Object? value) =>
     _convexToJsonInternal(value, value, '', false);
 

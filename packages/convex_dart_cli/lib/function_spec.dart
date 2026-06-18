@@ -1,7 +1,12 @@
+// ignore_for_file: implementation_imports
+
 import 'dart:async';
 import 'dart:convert';
 
-import 'package:convex_dart/browser.dart';
+import 'package:convex_dart/src/browser/sync/client.dart';
+import 'package:convex_dart/src/browser/sync/udf_path_utils.dart';
+import 'package:convex_dart/src/values/index.dart';
+
 import 'package:rxdart/rxdart.dart';
 
 const apiSpecQuery = '_system/cli/modules:apiSpec';

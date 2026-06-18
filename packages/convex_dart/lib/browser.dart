@@ -1,8 +1,12 @@
-/// Dart port of the Convex JavaScript*browser client from `convex-js`.
+/// Tools for accessing Convex from Dart applications.
 ///
-/// Maps `convex-js/src/browser/*` and `convex-js/src/values/*` to Dart
-/// equivalents: HTTP and WebSocket clients, reactive sync, and Convex value
-/// wire format.
+/// This library is a Dart port of the Convex JavaScript `convex/browser` module
+/// from `convex-js` at `npm/1.41.0`. It maps `convex-js/src/browser/*` and
+/// `convex-js/src/values/*` to Dart equivalents: HTTP and WebSocket clients,
+/// reactive sync, and Convex value wire format.
+///
+/// Use [ConvexHttpClient] for one-shot queries and mutations over HTTP, or
+/// [ConvexClient] for reactive subscriptions over WebSocket.
 library;
 
 export 'src/browser/http_client.dart';

@@ -16,7 +16,9 @@ import 'session.dart';
 import 'udf_path_utils.dart';
 import 'web_socket_manager.dart';
 
+/// Options for [BaseConvexClient].
 class BaseConvexClientOptions {
+  /// Creates base client options.
   const BaseConvexClientOptions({
     this.webSocketFactory,
     this.verbose = false,
@@ -26,15 +28,34 @@ class BaseConvexClientOptions {
     this.expectAuth = false,
   });
 
+  /// An alternate WebSocket factory for client communication with Convex.
+  ///
+  /// The default uses [ChannelSyncWebSocket] from `web_socket_channel`.
   final SyncWebSocketFactory? webSocketFactory;
+
+  /// Whether to emit additional logging for debugging.
   final bool verbose;
+
+  /// A custom logger, or `null` to use the default console logger.
   final Logger? logger;
+
+  /// Whether to send additional metrics to Convex for debugging.
   final bool reportDebugInfoToConvex;
+
+  /// Skip validating that the Convex deployment URL looks like
+  /// `https://happy-animal-123.convex.cloud` or localhost.
   final bool skipConvexDeploymentUrlCheck;
+
+  /// Whether query, mutation, and action requests should be held back until
+  /// the first auth token can be sent.
+  ///
+  /// This API is experimental: it may change or disappear.
   final bool expectAuth;
 }
 
+/// State describing the client's connection with the Convex backend.
 class ConnectionState {
+  /// Creates a connection state snapshot.
   const ConnectionState({
     required this.hasInflightRequests,
     required this.isWebSocketConnected,
@@ -46,13 +67,30 @@ class ConnectionState {
     required this.inflightActions,
   });
 
+  /// Whether the client has any inflight requests.
   final bool hasInflightRequests;
+
+  /// Whether the WebSocket is currently connected.
   final bool isWebSocketConnected;
+
+  /// The time of the oldest inflight request, if any.
   final DateTime? timeOfOldestInflightRequest;
+
+  /// Whether the client has ever opened a WebSocket to the ready state.
   final bool hasEverConnected;
+
+  /// The number of times this client has connected to the Convex backend.
+  ///
+  /// A high number may indicate trouble keeping a stable connection.
   final int connectionCount;
+
+  /// The number of times this client has tried and failed to connect.
   final int connectionRetries;
+
+  /// The number of mutations currently in flight.
   final int inflightMutations;
+
+  /// The number of actions currently in flight.
   final int inflightActions;
 
   Map<String, Object?> toJsonLike() => {
@@ -68,18 +106,36 @@ class ConnectionState {
   };
 }
 
+/// Options for [BaseConvexClient.subscribe].
 class SubscribeOptions {
+  /// Creates subscribe options.
   const SubscribeOptions({this.journal, this.componentPath});
+
+  /// An optional journal produced from a previous execution of this query.
+  ///
+  /// If there is an existing subscription to a query with the same name and
+  /// arguments, this journal has no effect.
   final QueryJournal journal;
+
+  /// Optional component path for component-scoped queries.
   final String? componentPath;
 }
 
+/// Options for [BaseConvexClient.mutation].
 class MutationOptions {
+  /// Creates mutation options.
   const MutationOptions({this.optimisticUpdate});
+
+  /// An optimistic update to apply along with this mutation.
+  ///
+  /// An optimistic update locally updates queries while a mutation is pending.
+  /// Once the mutation completes, the update is rolled back.
   final OptimisticUpdate? optimisticUpdate;
 }
 
+/// Describes updates to queries and mutations within a transition.
 class Transition {
+  /// Creates a transition description.
   const Transition({
     required this.queries,
     required this.reflectedMutations,
@@ -91,7 +147,20 @@ class Transition {
   final BigInt timestamp;
 }
 
+/// Low-level client for directly integrating state management libraries with
+/// Convex.
+///
+/// [BaseConvexClient] should not be used directly unless you need full control
+/// over subscriptions and transitions. Most developers should use
+/// [ConvexHttpClient] or [ConvexClient] instead.
+///
+/// [BaseConvexClient] is not Convex function type-aware: it deals with queries
+/// as functions that return [Value], not application-specific types.
 class BaseConvexClient {
+  /// Creates a [BaseConvexClient] connected to [address].
+  ///
+  /// [onTransition] is called with query tokens whose results changed. Additional
+  /// handlers can be registered via [addOnTransitionHandler].
   BaseConvexClient(
     String address,
     void Function(List<QueryToken> updatedQueries) onTransition, {
@@ -195,32 +264,49 @@ class BaseConvexClient {
   int _nextConnectionStateSubscriberId = 0;
   ConnectionState? _lastPublishedConnectionState;
 
+  /// Returns the maximum observed server timestamp, if any.
   BigInt? getMaxObservedTimestamp() => _maxObservedTimestamp;
 
+  /// Adds a handler called on each transition.
+  ///
+  /// External side effects (such as updating UI state) should be handled here.
   void Function() addOnTransitionHandler(void Function(Transition) fn) {
     final id = _transitionHandlerCounter++;
     _onTransitionFns[id] = fn;
     return () => _onTransitionFns.remove(id);
   }
 
+  /// Sets authentication for subsequent queries and mutations.
+  ///
+  /// See [ConvexClient.setAuth] for parameter semantics.
   Future<void> setAuth(
     AuthTokenFetcher fetchToken,
     void Function(bool isAuthenticated) onChange, [
     void Function(bool isRefreshing)? onRefreshChange,
   ]) => _authenticationManager.setConfig(fetchToken, onChange, onRefreshChange);
 
+  /// Whether an auth token is currently configured.
   bool hasAuth() => _state.hasAuth();
 
+  /// Clears the current authentication token.
   void clearAuth() {
     final message = _state.clearAuth();
     _webSocketManager.sendMessage(message);
   }
 
+  /// Sets admin auth to allow calling internal functions and acting as an
+  /// identity.
   void setAdminAuth(String value, [Map<String, Object?>? actingAs]) {
     final message = _state.setAdminAuth(value, actingAs);
     _webSocketManager.sendMessage(message);
   }
 
+  /// Subscribes to a query function.
+  ///
+  /// Whenever this query's result changes, [onTransition] handlers are called.
+  ///
+  /// [name] is the name of the query. [args] are the query arguments; if
+  /// omitted, the arguments default to `{}`.
   ({QueryToken queryToken, void Function() unsubscribe}) subscribe(
     String name, [
     Map<String, Object?>? args,
@@ -244,25 +330,37 @@ class BaseConvexClient {
     );
   }
 
+  /// Returns a query result based only on current local state.
+  ///
+  /// Returns a value only if the client is already subscribed to the query or
+  /// its value has been set optimistically.
   Object? localQueryResult(String udfPath, [Map<String, Object?>? args]) {
     final queryToken = serializePathAndArgs(udfPath, parseArgs(args));
     return _optimisticQueryResults.queryResult(queryToken);
   }
 
+  /// Returns a query result by [queryToken] from current local state.
   Object? localQueryResultByToken(QueryToken queryToken) =>
       _optimisticQueryResults.queryResult(queryToken);
 
+  /// Whether a local query result is available for [queryToken].
+  ///
+  /// This method does not throw if the result is an error.
   bool hasLocalQueryResultByToken(QueryToken queryToken) =>
       _optimisticQueryResults.hasQueryResult(queryToken);
 
+  /// Returns log lines forwarded from the server for a query, if available.
   List<String>? localQueryLogs(String udfPath, [Map<String, Object?>? args]) {
     final queryToken = serializePathAndArgs(udfPath, parseArgs(args));
     return _optimisticQueryResults.queryLogs(queryToken);
   }
 
+  /// Returns the current [QueryJournal] for a query, if a result has been
+  /// received.
   QueryJournal queryJournal(String name, [Map<String, Object?>? args]) =>
       _state.queryJournal(serializePathAndArgs(name, parseArgs(args)));
 
+  /// Returns the current [ConnectionState] with the Convex backend.
   ConnectionState connectionState() {
     final wsState = _webSocketManager.connectionState();
     return ConnectionState(
@@ -291,6 +389,7 @@ class BaseConvexClient {
     });
   }
 
+  /// Subscribes to [ConnectionState] changes.
   void Function() subscribeToConnectionState(
     void Function(ConnectionState) cb,
   ) {
@@ -299,6 +398,10 @@ class BaseConvexClient {
     return () => _connectionStateSubscribers.remove(id);
   }
 
+  /// Executes a mutation function.
+  ///
+  /// [name] is the name of the mutation. [args] are the mutation arguments; if
+  /// omitted, the arguments default to `{}`.
   Future<Object?> mutation(
     String name, [
     Map<String, Object?>? args,
@@ -372,6 +475,10 @@ class BaseConvexClient {
     );
   }
 
+  /// Executes an action function.
+  ///
+  /// [name] is the name of the action. [args] are the action arguments; if
+  /// omitted, the arguments default to `{}`.
   Future<Object?> action(String name, [Map<String, Object?>? args]) async {
     final result = await actionInternal(name, args);
     if (result['success'] != true) {
@@ -406,11 +513,13 @@ class BaseConvexClient {
     return _requestManager.request(message, mightBeSent);
   }
 
+  /// Closes the WebSocket connection and stops the client.
   Future<void> close() {
     _authenticationManager.stop();
     return _webSocketManager.terminate();
   }
 
+  /// The canonical deployment URL for this client.
   String get url => _address;
   int get nextRequestId => _nextRequestId;
   String get sessionId => _sessionId;

@@ -1,6 +1,10 @@
 import '../logging.dart';
 import 'local_state.dart';
 
+/// Fetches a JWT auth token for Convex.
+///
+/// [args.forceRefreshToken] is `true` when the server rejected the previous
+/// token and a fresh token is required.
 typedef AuthTokenFetcher =
     Future<String?> Function(({bool forceRefreshToken}) args);
 

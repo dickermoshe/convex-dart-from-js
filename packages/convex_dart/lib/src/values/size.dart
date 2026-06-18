@@ -1,11 +1,24 @@
+/// Calculate the size of a Convex value in bytes.
+///
+/// This matches the Rust implementation used to compute bandwidth and document
+/// size limits in Convex.
+library;
+
 import 'dart:convert';
 import 'dart:typed_data';
 
 import 'value.dart';
 
+/// Estimated size contribution of the `_id` system field when absent.
 const systemFieldIdEstimate = 38;
+
+/// Estimated size contribution of the `_creationTime` system field when absent.
 const systemFieldCreationTimeSize = 23;
 
+/// Returns the size in bytes of a Convex [value].
+///
+/// This matches how Convex calculates document size for bandwidth tracking and
+/// size limit enforcement.
 int getConvexSize(Object? value) {
   if (value is ConvexUndefined) return 0;
   if (value == null || value is bool) return 1;
@@ -29,6 +42,8 @@ int getConvexSize(Object? value) {
   throw ArgumentError('Unsupported value type: ${value.runtimeType}');
 }
 
+/// Returns the size in bytes of a Convex document [value], including system
+/// fields when they are absent.
 int getDocumentSize(Map<String, Object?> value, {int? customIdLength}) {
   final baseSize = getConvexSize(value);
   final hasId = value.containsKey('_id') && value['_id'] is! ConvexUndefined;

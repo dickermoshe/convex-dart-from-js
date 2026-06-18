@@ -2,7 +2,10 @@ import 'dart:convert';
 
 import '../../values/value.dart';
 
+/// Opaque token identifying a subscribed query and its arguments.
 typedef QueryToken = String;
+
+/// Opaque token identifying a subscribed paginated query.
 typedef PaginatedQueryToken = String;
 
 String canonicalizeUdfPath(String udfPath) {

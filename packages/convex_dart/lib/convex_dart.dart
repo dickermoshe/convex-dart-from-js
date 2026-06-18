@@ -1,6 +1,8 @@
-export 'src/browser/http_client.dart';
-export 'src/browser/simple_client.dart';
-export 'src/browser/sync/client.dart';
-export 'src/browser/sync/optimistic_updates.dart';
-export 'src/browser/sync/udf_path_utils.dart' show QueryToken;
-export 'src/values/index.dart';
+/// Dart client library for [Convex](https://convex.dev).
+///
+/// This package is a port of the Convex JavaScript browser client from
+/// `convex-js` at `npm/1.41.0`. Import `package:convex_dart/browser.dart` for
+/// HTTP and WebSocket clients, value encoding, and validators.
+library;
+
+export 'browser.dart';
