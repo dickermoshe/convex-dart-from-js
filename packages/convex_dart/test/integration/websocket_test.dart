@@ -19,17 +19,91 @@ void main() {
   }
 
   group('WebSocket integration', () {
+    test('rawQuery waits for an uncached query result', () async {
+      final client = ConvexClient(url);
+      addTearDown(() => client.close());
+
+      final result = await retry(
+        () => client.rawQuery('integration:echo', {'message': 'one-shot'}),
+      );
+      expect(result, {'message': 'one-shot'});
+    });
+
+    test('onUpdate calls new listeners with cached query results', () async {
+      final client = ConvexClient(url);
+      addTearDown(() => client.close());
+
+      final firstCompleter = Completer<Object?>();
+      final first = client.onUpdate<Object?>(
+        'integration:echo',
+        {'message': 'cached'},
+        (value) {
+          if (value != null && !firstCompleter.isCompleted) {
+            firstCompleter.complete(value);
+          }
+        },
+      );
+      addTearDown(first.unsubscribe);
+
+      await retry(
+        () => firstCompleter.future.timeout(const Duration(seconds: 30)),
+      );
+
+      final secondCompleter = Completer<Object?>();
+      final second = client.onUpdate<Object?>(
+        'integration:echo',
+        {'message': 'cached'},
+        (value) {
+          if (value != null && !secondCompleter.isCompleted) {
+            secondCompleter.complete(value);
+          }
+        },
+      );
+      addTearDown(second.unsubscribe);
+
+      final cached = await retry(
+        () => secondCompleter.future.timeout(const Duration(seconds: 30)),
+      );
+      expect(cached, {'message': 'cached'});
+    });
+
+    test('onUpdate routes query errors to onError', () async {
+      final client = ConvexClient(url);
+      addTearDown(() => client.close());
+
+      final errorCompleter = Completer<Object>();
+      final handle = client.onUpdate<Object?>(
+        'integration:throws',
+        {},
+        (_) {},
+        onError: (error, _) {
+          if (!errorCompleter.isCompleted) {
+            errorCompleter.complete(error);
+          }
+        },
+      );
+      addTearDown(handle.unsubscribe);
+
+      final error = await retry(
+        () => errorCompleter.future.timeout(const Duration(seconds: 30)),
+      );
+      expect(
+        error,
+        isA<ConvexError<Object?>>().having((error) => error.data, 'data', {
+          'code': 'test',
+        }),
+      );
+    });
+
     test('onUpdate receives reactive query results', () async {
       final client = ConvexClient(url);
       addTearDown(() => client.close());
 
       final completer = Completer<Object?>();
-      late Unsubscribe<Object?> handle;
-      handle = client.onUpdate<Object?>(
+      final handle = client.onUpdate<Object?>(
         'integration:echo',
         {'message': 'live'},
-        () {
-          final value = handle.getCurrentValue();
+        (value) {
           if (value != null && !completer.isCompleted) {
             completer.complete(value);
           }
@@ -47,12 +121,11 @@ void main() {
       final client = ConvexClient(url);
       addTearDown(() => client.close());
 
-      const name = 'dart-integration-ws';
+      final name = uniqueIntegrationName('dart-integration-ws');
       final updates = <BigInt?>[];
-      late Unsubscribe<BigInt?> handle;
-      handle = client.onUpdate<BigInt?>('integration:getCounter', {
+      final handle = client.onUpdate<BigInt?>('integration:getCounter', {
         'name': name,
-      }, () => updates.add(handle.getCurrentValue()));
+      }, updates.add);
 
       await retry(
         () => client.rawMutation('integration:increment', {'name': name}),
@@ -67,6 +140,66 @@ void main() {
       expect(updates.last, isA<BigInt>());
       expect(updates.last! >= BigInt.one, isTrue);
       handle.unsubscribe();
+    });
+
+    test('optimistic update is visible before mutation settles', () async {
+      final client = ConvexClient(url);
+      addTearDown(() => client.close());
+
+      final name = uniqueIntegrationName('dart-integration-ws-optimistic');
+      final updates = <BigInt?>[];
+      final initialCompleter = Completer<void>();
+      final optimisticValue = BigInt.from(999);
+
+      final handle = client.onUpdate<BigInt?>(
+        'integration:getCounter',
+        {'name': name},
+        (value) {
+          updates.add(value);
+          if (!initialCompleter.isCompleted) {
+            initialCompleter.complete();
+          }
+        },
+      );
+      addTearDown(handle.unsubscribe);
+
+      await retry(
+        () => initialCompleter.future.timeout(const Duration(seconds: 30)),
+      );
+      expect(updates.last, isNull);
+
+      final mutation = client.rawMutation(
+        'integration:increment',
+        {'name': name},
+        optimisticUpdate: (store, args) {
+          store.setRawQuery('integration:getCounter', {
+            'name': args['name'],
+          }, optimisticValue);
+        },
+      );
+
+      await retry(
+        () async {
+          if (!updates.contains(optimisticValue)) {
+            throw StateError('waiting for optimistic update');
+          }
+        },
+        maxAttempts: 10,
+        delay: const Duration(milliseconds: 100),
+      );
+
+      final result = await retry(() => mutation);
+      expect(result, BigInt.one);
+
+      await retry(
+        () async {
+          if (updates.last != BigInt.one) {
+            throw StateError('waiting for server value');
+          }
+        },
+        maxAttempts: 10,
+        delay: const Duration(milliseconds: 200),
+      );
     });
 
     test(
@@ -97,17 +230,18 @@ void main() {
         );
 
         final queryCompleter = Completer<String>();
-        late Unsubscribe<String> handle;
-        handle = client.onUpdate<String>('integration:authRequired', {}, () {
-          try {
-            final value = handle.getCurrentValue();
+        final handle = client.onUpdate<String>(
+          'integration:authRequired',
+          {},
+          (value) {
             if (value != null && !queryCompleter.isCompleted) {
               queryCompleter.complete(value);
             }
-          } on Object {
+          },
+          onError: (_, _) {
             // Query may fail before auth propagates; wait for a successful value.
-          }
-        });
+          },
+        );
 
         final identity = await retry(
           () => queryCompleter.future.timeout(const Duration(seconds: 30)),
@@ -120,3 +254,6 @@ void main() {
     );
   });
 }
+
+String uniqueIntegrationName(String prefix) =>
+    '$prefix-${DateTime.now().microsecondsSinceEpoch}';

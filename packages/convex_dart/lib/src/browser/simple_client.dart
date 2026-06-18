@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import '../common/index.dart';
 import 'sync/authentication_manager.dart';
 import 'sync/client.dart';
@@ -14,7 +16,12 @@ class ConvexClientOptions extends BaseConvexClientOptions {
     super.reportDebugInfoToConvex,
     super.skipConvexDeploymentUrlCheck,
     super.expectAuth,
+    this.disabled = false,
   });
+
+  /// Makes subscription registration a no-op and query, mutation, and action
+  /// calls throw.
+  final bool disabled;
 }
 
 /// Stops callbacks from running.
@@ -52,27 +59,40 @@ class ConvexClient {
     ConvexClientOptions options = const ConvexClientOptions(),
   }) {
     if (!options.skipConvexDeploymentUrlCheck) validateDeploymentUrl(address);
-    _client = BaseConvexClient(address, _transition, options: options);
+    _disabled = options.disabled;
+    if (!_disabled) {
+      _client = BaseConvexClient(address, _transition, options: options);
+    }
   }
 
-  late BaseConvexClient _client;
+  BaseConvexClient? _client;
   bool _closed = false;
-  final Map<QueryToken, List<void Function()>> _listeners = {};
+  var _disabled = false;
+  final Set<_QueryInfo> _listeners = {};
+  bool _callNewListenersWithCurrentValuesScheduled = false;
 
   /// Whether [close] has been called. Once closed, no registered callbacks
   /// will fire again.
   bool get closed => _closed;
 
   /// The underlying [BaseConvexClient].
-  BaseConvexClient get client => _client;
+  BaseConvexClient get client {
+    final activeClient = _client;
+    if (activeClient == null) {
+      throw StateError('ConvexClient is disabled');
+    }
+    return activeClient;
+  }
 
-  /// Whether the client is disabled. Always `false` for this implementation.
-  bool get disabled => false;
+  /// Whether the client is disabled.
+  bool get disabled => _disabled;
 
   /// Closes the client and stops all subscriptions.
   Future<void> close() async {
+    if (disabled) return;
+    _listeners.clear();
     _closed = true;
-    await _client.close();
+    await client.close();
   }
 
   /// Sets the authentication token to be used for subsequent queries and
@@ -90,14 +110,41 @@ class ConvexClient {
     AuthTokenFetcher fetchToken,
     void Function(bool isAuthenticated) onChange, [
     void Function(bool isRefreshing)? onRefreshChange,
-  ]) => _client.setAuth(fetchToken, onChange, onRefreshChange);
+  ]) {
+    if (disabled) return Future<void>.value();
+    return client.setAuth(fetchToken, onChange, onRefreshChange);
+  }
 
   /// Clears the current authentication token.
-  void clearAuth() => _client.clearAuth();
+  void clearAuth() {
+    if (disabled) return;
+    client.clearAuth();
+  }
+
+  /// Gets the current JWT auth token and decoded claims, if user auth is set.
+  ({String token, Map<String, Object?> decoded})? getAuth() {
+    if (disabled) return null;
+    return client.getCurrentAuthClaims();
+  }
+
+  /// Sets admin auth to allow calling internal functions and acting as an
+  /// identity.
+  void setAdminAuth(String token, [Map<String, Object?>? identity]) {
+    if (closed) {
+      throw StateError('ConvexClient has already been closed.');
+    }
+    if (disabled) return;
+    client.setAdminAuth(token, identity);
+  }
 
   /// Returns the current [ConnectionState] between the client and the Convex
   /// backend.
-  ConnectionState connectionState() => _client.connectionState();
+  ConnectionState connectionState() {
+    if (disabled) {
+      throw StateError('ConvexClient is disabled');
+    }
+    return client.connectionState();
+  }
 
   /// Subscribes to [ConnectionState] changes.
   ///
@@ -106,7 +153,10 @@ class ConvexClient {
   /// would be called more frequently.
   void Function() subscribeToConnectionState(
     void Function(ConnectionState) cb,
-  ) => _client.subscribeToConnectionState(cb);
+  ) {
+    if (disabled) return () {};
+    return client.subscribeToConnectionState(cb);
+  }
 
   /// Registers a callback whenever a new result for a query is received.
   ///
@@ -118,19 +168,37 @@ class ConvexClient {
   Unsubscribe<T> onUpdate<T>(
     String query,
     Map<String, Object?> args,
-    void Function() callback, {
+    void Function(T? value) callback, {
+    void Function(Object error, StackTrace stackTrace)? onError,
     SubscribeOptions options = const SubscribeOptions(),
   }) {
-    final subscription = _client.subscribe(query, args, options);
-    _listeners.putIfAbsent(subscription.queryToken, () => []).add(callback);
+    if (disabled) {
+      return _createDisabledUnsubscribe<T>();
+    }
+    final subscription = client.subscribe(query, args, options);
+    final queryInfo = _QueryInfo(
+      queryToken: subscription.queryToken,
+      callback: (value) => callback(value as T?),
+      onError: onError,
+      unsubscribe: subscription.unsubscribe,
+    );
+    _listeners.add(queryInfo);
+
+    if (client.hasLocalQueryResultByToken(subscription.queryToken) &&
+        !_callNewListenersWithCurrentValuesScheduled) {
+      _callNewListenersWithCurrentValuesScheduled = true;
+      scheduleMicrotask(_callNewListenersWithCurrentValues);
+    }
+
     return Unsubscribe<T>(
       unsubscribe: () {
-        _listeners[subscription.queryToken]?.remove(callback);
-        subscription.unsubscribe();
+        if (closed) return;
+        _listeners.remove(queryInfo);
+        queryInfo.unsubscribe();
       },
       getCurrentValue: () =>
-          _client.localQueryResultByToken(subscription.queryToken) as T?,
-      getQueryLogs: () => _client.localQueryLogs(query, args),
+          client.localQueryResultByToken(subscription.queryToken) as T?,
+      getQueryLogs: () => client.localQueryLogs(query, args),
     );
   }
 
@@ -143,30 +211,124 @@ class ConvexClient {
     String mutation,
     Map<String, Object?> args, {
     OptimisticUpdate? optimisticUpdate,
-  }) => _client.mutation(
-    mutation,
-    args,
-    MutationOptions(optimisticUpdate: optimisticUpdate),
-  );
+  }) {
+    if (disabled) {
+      throw StateError('ConvexClient is disabled');
+    }
+    return client.mutation(
+      mutation,
+      args,
+      MutationOptions(optimisticUpdate: optimisticUpdate),
+    );
+  }
 
   /// Executes an action function.
   ///
   /// [action] is the name of the action. [args] are the action arguments.
-  Future<Object?> rawAction(String action, Map<String, Object?> args) =>
-      _client.action(action, args);
+  Future<Object?> rawAction(String action, Map<String, Object?> args) {
+    if (disabled) {
+      throw StateError('ConvexClient is disabled');
+    }
+    return client.action(action, args);
+  }
 
-  /// Fetches a query result once from local state.
+  /// Fetches a query result once.
   ///
-  /// Returns a cached result only if the client is already subscribed to the
-  /// query or has an optimistic value.
-  Future<Object?> rawQuery(String query, Map<String, Object?> args) async =>
-      _client.localQueryResult(query, args);
+  /// Returns a cached result if present. Otherwise subscribes to the query,
+  /// waits for the first result, and then unsubscribes.
+  Future<Object?> rawQuery(String query, Map<String, Object?> args) {
+    if (disabled) {
+      throw StateError('ConvexClient is disabled');
+    }
+    final queryToken = serializePathAndArgs(query, parseArgs(args));
+    if (client.hasLocalQueryResultByToken(queryToken)) {
+      return Future<Object?>.value(client.localQueryResultByToken(queryToken));
+    }
 
-  void _transition(List<QueryToken> updatedQueries) {
-    for (final token in updatedQueries) {
-      for (final listener in List.of(_listeners[token] ?? const [])) {
-        listener();
+    final completer = Completer<Object?>();
+    late final Unsubscribe<Object?> subscription;
+    subscription = onUpdate<Object?>(
+      query,
+      args,
+      (value) {
+        subscription.unsubscribe();
+        if (!completer.isCompleted) {
+          completer.complete(value);
+        }
+      },
+      onError: (error, stackTrace) {
+        subscription.unsubscribe();
+        if (!completer.isCompleted) {
+          completer.completeError(error, stackTrace);
+        }
+      },
+    );
+    return completer.future;
+  }
+
+  Unsubscribe<T> _createDisabledUnsubscribe<T>() {
+    void unsubscribe() {}
+    return Unsubscribe<T>(
+      unsubscribe: unsubscribe,
+      getCurrentValue: () => null,
+      getQueryLogs: () => null,
+    );
+  }
+
+  void _callNewListenersWithCurrentValues() {
+    _callNewListenersWithCurrentValuesScheduled = false;
+    _transition(const [], callNewListeners: true);
+  }
+
+  void _transition(
+    List<QueryToken> updatedQueries, {
+    bool callNewListeners = false,
+  }) {
+    if (closed) return;
+
+    final updated = updatedQueries.toSet();
+    for (final queryInfo in List.of(_listeners)) {
+      final hasResultReady = client.hasLocalQueryResultByToken(
+        queryInfo.queryToken,
+      );
+      if (!updated.contains(queryInfo.queryToken) &&
+          !(callNewListeners && !queryInfo.hasEverRun && hasResultReady)) {
+        continue;
+      }
+
+      queryInfo.hasEverRun = true;
+      try {
+        final value = client.localQueryResultByToken(queryInfo.queryToken);
+        queryInfo.call(value);
+      } on Object catch (error, stackTrace) {
+        final onError = queryInfo.onError;
+        if (onError != null) {
+          onError(error, stackTrace);
+        } else {
+          scheduleMicrotask(() {
+            Error.throwWithStackTrace(error, stackTrace);
+          });
+        }
       }
     }
+  }
+}
+
+class _QueryInfo {
+  _QueryInfo({
+    required this.queryToken,
+    required this.callback,
+    required this.onError,
+    required this.unsubscribe,
+  });
+
+  final QueryToken queryToken;
+  final void Function(Object? value) callback;
+  final void Function(Object error, StackTrace stackTrace)? onError;
+  final void Function() unsubscribe;
+  bool hasEverRun = false;
+
+  void call(Object? value) {
+    callback(value);
   }
 }

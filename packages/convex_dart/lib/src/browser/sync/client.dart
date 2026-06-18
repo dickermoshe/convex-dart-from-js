@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:convex_dart/src/browser.dart';
 
@@ -286,6 +287,32 @@ class BaseConvexClient {
 
   /// Whether an auth token is currently configured.
   bool hasAuth() => _state.hasAuth();
+
+  /// Gets the current JWT auth token and decoded claims, if user auth is set.
+  ({String token, Map<String, Object?> decoded})? getCurrentAuthClaims() {
+    final auth = _state.getAuth();
+    if (auth == null || auth['tokenType'] != 'User') {
+      return null;
+    }
+    final token = auth['value'];
+    if (token is! String) {
+      return null;
+    }
+
+    var decoded = <String, Object?>{};
+    try {
+      final parts = token.split('.');
+      if (parts.length >= 2) {
+        final payload = utf8.decode(
+          base64Url.decode(_normalizeJwtPart(parts[1])),
+        );
+        decoded = (jsonDecode(payload) as Map).cast<String, Object?>();
+      }
+    } on Object {
+      decoded = {};
+    }
+    return (token: token, decoded: decoded);
+  }
 
   /// Clears the current authentication token.
   void clearAuth() {
@@ -625,4 +652,12 @@ class BaseConvexClient {
         : throw ArgumentError('Unknown parent protocol ${uri.scheme}');
     return uri.replace(scheme: protocol, path: '/api/1.41.0/sync').toString();
   }
+}
+
+String _normalizeJwtPart(String value) {
+  final padding = value.length % 4;
+  if (padding == 0) {
+    return value;
+  }
+  return value.padRight(value.length + 4 - padding, '=');
 }
