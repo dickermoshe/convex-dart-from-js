@@ -8,6 +8,7 @@ library;
 import 'dart:async';
 
 import 'package:convex_dart/src/browser.dart';
+export 'src/browser.dart';
 
 sealed class ConvexFunction<Args, Returns> {
   final String path;

@@ -194,6 +194,54 @@ class ConvexHttpClient {
     wrapArgsInArray: false,
   );
 
+  /// Executes an HTTP action using this client's underlying HTTP client.
+  ///
+  /// Generated client subclasses use this so HTTP action helpers reuse
+  /// [ConvexHttpClientOptions.httpClient] and the current auth state.
+  Future<http.Response> rawHttpAction(
+    String method,
+    Uri uri, {
+    Map<String, String>? headers,
+    Object? body,
+    Encoding? encoding,
+  }) {
+    final requestHeaders = {..._headers(), ...?headers};
+    switch (method.toUpperCase()) {
+      case 'GET':
+        return _client.get(uri, headers: requestHeaders);
+      case 'POST':
+        return _client.post(
+          uri,
+          headers: requestHeaders,
+          body: body,
+          encoding: encoding,
+        );
+      case 'PUT':
+        return _client.put(
+          uri,
+          headers: requestHeaders,
+          body: body,
+          encoding: encoding,
+        );
+      case 'DELETE':
+        return _client.delete(
+          uri,
+          headers: requestHeaders,
+          body: body,
+          encoding: encoding,
+        );
+      case 'PATCH':
+        return _client.patch(
+          uri,
+          headers: requestHeaders,
+          body: body,
+          encoding: encoding,
+        );
+      default:
+        throw ArgumentError.value(method, 'method', 'Unsupported HTTP method');
+    }
+  }
+
   /// Closes the underlying HTTP client.
   void close() => _client.close();
 

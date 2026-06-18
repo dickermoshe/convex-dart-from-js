@@ -48,6 +48,22 @@ class TempNameAllocator {
   }
 }
 
+/// A generated Convex function plus the module import metadata needed by
+/// client.dart.
+class BuiltFunctionSpec {
+  BuiltFunctionSpec({required this.function});
+
+  final FunctionSpec function;
+
+  String get importPath =>
+      './functions/${path.posix.joinAll(function.modulePathParts)}';
+
+  List<String> get apiPathParts => [
+    ...function.convexFunctionIdentifier.split(':').first.split('/'),
+    function.functionName,
+  ];
+}
+
 @MappableClass()
 class FunctionsSpec with FunctionsSpecMappable {
   final String url;
@@ -60,6 +76,7 @@ class FunctionsSpec with FunctionsSpecMappable {
     required bool publicSerialize,
   }) async {
     final moduleContexts = <String, FunctionBuildContext>{};
+    final builtFunctionSpecs = <BuiltFunctionSpec>[];
 
     // Create the functions
     for (final function in functions.whereType<FunctionSpec>()) {
@@ -78,6 +95,7 @@ class FunctionsSpec with FunctionsSpecMappable {
           () => FunctionBuildContext(context),
         );
         function.build(functionContext, publicSerialize: publicSerialize);
+        builtFunctionSpecs.add(BuiltFunctionSpec(function: function));
       } catch (e, stackTrace) {
         // ignore: avoid_print
         print(
@@ -103,6 +121,12 @@ class FunctionsSpec with FunctionsSpecMappable {
           '\n${functionContext.typedefBuffer}';
     }
 
+    // Create the client.dart file
+    _buildClient(
+      context,
+      functions.whereType<HttpFunctionSpec>(),
+      builtFunctionSpecs,
+    );
     // Create the schema.dart file
     _buildSchema(context);
     // Create the literals.dart file
@@ -127,6 +151,7 @@ class FunctionsSpec with FunctionsSpecMappable {
     }
 
     if (formatFailedCount > 0) {
+      // ignore: avoid_print
       print(
         'Code formatting summary: $formattedCount files formatted successfully, '
         '$formatFailedCount files failed formatting but were still generated.',
@@ -171,6 +196,101 @@ class ${tableName.pascalCase}Id  implements TableId {
     context.outputs[path.posix.join('schema.dart')] = schemaBuffer.toString();
   }
 
+  void _buildClient(
+    ClientBuildContext context,
+    Iterable<HttpFunctionSpec> httpFunctions,
+    Iterable<BuiltFunctionSpec> builtFunctionSpecs,
+  ) {
+    final builtSpecs = builtFunctionSpecs.toList();
+    final httpFunctionsBuffer = StringBuffer();
+    for (final httpFunction in httpFunctions) {
+      try {
+        httpFunctionsBuffer.writeln(httpFunction.build());
+      } catch (e) {
+        // ignore: avoid_print
+        print(
+          'WARNING: Skipping function ${httpFunction.method.name} ${httpFunction.path} due to error: $e',
+        );
+      }
+    }
+
+    final importPrefixes = <String, String>{};
+    for (final spec in builtSpecs) {
+      importPrefixes.putIfAbsent(
+        spec.importPath,
+        () => 'functions${importPrefixes.length}',
+      );
+    }
+    final moduleImports = importPrefixes.entries
+        .map((entry) => 'import "${entry.key}" as ${entry.value};')
+        .join('\n');
+
+    final tree = TreeNode();
+    for (final spec in builtSpecs) {
+      var root = tree;
+      for (final part in spec.apiPathParts.take(spec.apiPathParts.length - 1)) {
+        final node = root.children.putIfAbsent(part, () => TreeNode());
+        if (node is! TreeNode) {
+          throw StateError(
+            "Unable to build API: A function cannot have the same name as a folder. Found both a folder and a function named '$part'.",
+          );
+        }
+        root = node;
+      }
+      final leafName = spec.apiPathParts.last;
+      final existing = root.children.putIfAbsent(
+        leafName,
+        () => LeafNode(spec),
+      );
+      if (existing is! LeafNode || existing.function != spec) {
+        throw StateError(
+          "Unable to build API: duplicate generated API member '$leafName'.",
+        );
+      }
+    }
+
+    context.outputs[path.posix.join('client.dart')] =
+        '''
+// ignore_for_file: type=lint, unused_import, unnecessary_question_mark, dead_code, unnecessary_non_null_assertion
+// ignore_for_file: unused_element, unnecessary_cast, override_on_non_overriding_member
+// ignore_for_file: strict_raw_type, inference_failure_on_untyped_parameter, invalid_use_of_internal_member
+import "dart:convert" as \$convert;
+
+import "package:convex_dart/convex_dart.dart";
+import "package:http/http.dart" as \$http;
+
+$moduleImports
+
+class MyConvexClient extends ConvexHttpClient {
+  MyConvexClient({ConvexHttpClientOptions? options})
+    : super("$url", options: options);
+
+  final String httpUrl = "${_httpActionUrl(url)}";
+
+$httpFunctionsBuffer
+}
+
+class MyConvexWebsocketClient extends ConvexClient {
+  MyConvexWebsocketClient({
+    ConvexClientOptions options = const ConvexClientOptions(),
+  }) : super("$url", options: options);
+}
+
+${tree.children.isNotEmpty ? 'final api = ${tree.build(importPrefixes)};' : ''}
+''';
+  }
+
+  String _httpActionUrl(String deploymentUrl) {
+    final uri = Uri.tryParse(deploymentUrl);
+    if (uri != null &&
+        (uri.host == '127.0.0.1' || uri.host == 'localhost') &&
+        uri.hasPort &&
+        uri.port == 3210) {
+      return uri.replace(port: 3211).toString();
+    }
+    return deploymentUrl.replaceAll(RegExp(r'\.cloud$'), '.site');
+  }
+
   void _buildLiterals(ClientBuildContext context) {
     final literalsBuffer = StringBuffer('''
 // ignore_for_file: type=lint, unused_import, unnecessary_question_mark, dead_code,unnecessary_non_null_assertion
@@ -188,6 +308,40 @@ import "package:convex_dart/convex_dart.dart";
     context.outputs[path.posix.join('literals.dart')] = literalsBuffer
         .toString();
   }
+}
+
+sealed class BaseNode {}
+
+class TreeNode extends BaseNode {
+  final children = <String, BaseNode>{};
+
+  String build(Map<String, String> importPrefixes) {
+    final buffer = StringBuffer('(\n');
+    for (final child in children.entries) {
+      final key = stringToDart(child.key).camelCase;
+      switch (child.value) {
+        case TreeNode treeNode:
+          buffer.write('$key: ${treeNode.build(importPrefixes)},\n');
+        case LeafNode(:final function):
+          final importPrefix = importPrefixes[function.importPath];
+          if (importPrefix == null) {
+            throw StateError(
+              'Missing import prefix for ${function.importPath}',
+            );
+          }
+          buffer.write(
+            '$key: $importPrefix.${function.function.dartFunctionName},\n',
+          );
+      }
+    }
+    buffer.write(')');
+    return buffer.toString();
+  }
+}
+
+class LeafNode extends BaseNode {
+  final BuiltFunctionSpec function;
+  LeafNode(this.function);
 }
 
 @MappableEnum(mode: ValuesMode.named)
@@ -253,7 +407,7 @@ class HttpFunctionSpec extends BaseFunctionSpec with HttpFunctionSpecMappable {
     if (method == HttpMethod.OPTIONS) {
       throw StateError('OPTIONS requests are not supported');
     }
-    final buffer = StringBuffer('static Future<\$http.Response> ');
+    final buffer = StringBuffer('Future<\$http.Response> ');
     final hasSuffix = path.endsWith('*');
     final pathWithoutSuffix = path.replaceAll(RegExp(r'\*$'), '');
 
@@ -274,18 +428,18 @@ class HttpFunctionSpec extends BaseFunctionSpec with HttpFunctionSpecMappable {
     buffer.writeln(
       """final uri = Uri.parse(httpUrl + r'$pathWithoutSuffix' ${hasSuffix ? "+ suffix" : ""});""",
     );
-    buffer.writeln('return \$http.');
+    buffer.writeln('return rawHttpAction(');
     switch (method) {
       case HttpMethod.GET:
-        buffer.write('get(');
+        buffer.write("'GET',");
       case HttpMethod.POST:
-        buffer.write('post(');
+        buffer.write("'POST',");
       case HttpMethod.PUT:
-        buffer.write('put(');
+        buffer.write("'PUT',");
       case HttpMethod.DELETE:
-        buffer.write('delete(');
+        buffer.write("'DELETE',");
       case HttpMethod.PATCH:
-        buffer.write('patch(');
+        buffer.write("'PATCH',");
       case HttpMethod.OPTIONS:
         throw StateError('Unreachable Area');
     }

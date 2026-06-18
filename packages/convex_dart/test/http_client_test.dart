@@ -243,6 +243,37 @@ void main() {
       },
     );
 
+    test(
+      'rawHttpAction uses configured HTTP client and auth headers',
+      () async {
+        final fake = FakeHttpClient((request) async {
+          expect(request.method, 'POST');
+          expect(request.url.toString(), 'https://x.convex.site/api/v1/custom');
+          expect(request.headers['Authorization'], 'Bearer token');
+          expect(request.headers['Convex-Client'], convexClientVersion);
+          expect(request.headers['x-test'], '1');
+          expect(request.body, 'payload');
+          return http.Response('ok', 201);
+        });
+        final client = ConvexHttpClient(
+          'https://x.convex.cloud',
+          options: ConvexHttpClientOptions(httpClient: fake, auth: 'token'),
+        );
+
+        final response = await client.rawHttpAction(
+          'POST',
+          Uri.parse('https://x.convex.site/api/v1/custom'),
+          headers: {'x-test': '1'},
+          body: 'payload',
+          encoding: utf8,
+        );
+
+        expect(response.statusCode, 201);
+        expect(response.body, 'ok');
+        expect(fake.requests, hasLength(1));
+      },
+    );
+
     test('throws ConvexError with forwarded data', () async {
       final fake = FakeHttpClient((request) async {
         return jsonResponse({
