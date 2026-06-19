@@ -51,7 +51,6 @@ jobs:
         working-directory: packages/example
         env:
           CONVEX_DEPLOY_KEY: ${{ secrets.EXAMPLE_CONVEX_DEPLOY_KEY }}
-          CONVEX_URL: https://dependable-wolf-352.convex.cloud
         run: |
           npm ci
           npx convex deploy
