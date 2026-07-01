@@ -74,7 +74,7 @@ class BigBrainClient {
         'deploymentType': deploymentType,
       },
     });
-    final json = await _post(
+    final json = await _postMap(
       'deployment/authorize_within_current_project',
       body,
     );
@@ -85,7 +85,7 @@ class BigBrainClient {
     required String deploymentName,
   }) async {
     final body = jsonEncode({'deploymentName': deploymentName});
-    final json = await _post('deployment/authorize_prod', body);
+    final json = await _postMap('deployment/authorize_prod', body);
     return DeploymentAuthResponse.fromJson(json);
   }
 
@@ -99,21 +99,31 @@ class BigBrainClient {
       'projectSlug': projectSlug,
       'deploymentType': deploymentType,
     });
-    final json = await _post('deployment/provision_and_authorize', body);
+    final json = await _postMap('deployment/provision_and_authorize', body);
     return DeploymentAuthResponse.fromJson(json);
   }
 
   Future<String> urlForDeployKey(String deployKey) async {
     final body = jsonEncode({'deployKey': deployKey});
-    final json = await _post('deployment/url_for_key', body);
-    final url = json['url'] ?? json;
+    final json = await _postJson('deployment/url_for_key', body);
+    final url = json is Map ? json['url'] : json;
     if (url is String) return url;
     throw BigBrainException(
       'Unexpected url_for_key response: ${jsonEncode(json)}',
     );
   }
 
-  Future<Map<String, Object?>> _post(String path, String body) async {
+  Future<Map<String, Object?>> _postMap(String path, String body) async {
+    final decoded = await _postJson(path, body);
+    if (decoded is! Map) {
+      throw BigBrainException(
+        'Unexpected Convex API response: ${jsonEncode(decoded)}',
+      );
+    }
+    return decoded.cast<String, Object?>();
+  }
+
+  Future<Object?> _postJson(String path, String body) async {
     final response = await _http.post(
       Uri.parse('$_baseUrl$path'),
       headers: {
@@ -131,13 +141,19 @@ class BigBrainClient {
       );
     }
 
-    final decoded = jsonDecode(response.body);
-    if (decoded is! Map) {
+    try {
+      return jsonDecode(response.body);
+    } on FormatException {
       throw BigBrainException(
         'Unexpected Convex API response: ${response.body}',
+        statusCode: response.statusCode,
+      );
+    } on Object catch (error) {
+      throw BigBrainException(
+        'Failed to parse Convex API response: $error',
+        statusCode: response.statusCode,
       );
     }
-    return decoded.cast<String, Object?>();
   }
 
   void close() => _http.close();

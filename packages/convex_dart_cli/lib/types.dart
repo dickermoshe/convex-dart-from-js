@@ -161,7 +161,7 @@ class FunctionsSpec with FunctionsSpecMappable {
 
   void _buildSchema(ClientBuildContext context) {
     final schemaBuffer = StringBuffer("""
-// ignore_for_file: type=lint, unused_import, unnecessary_question_mark, dead_code,unnecessary_non_null_assertion
+// ignore_for_file: type=lint, unused_import, unnecessary_question_mark, dead_code, unnecessary_null_comparison, unnecessary_non_null_assertion
 // ignore_for_file: unused_element, unnecessary_cast, override_on_non_overriding_member
 // ignore_for_file: strict_raw_type, inference_failure_on_untyped_parameter, invalid_use_of_internal_member
 import "dart:typed_data";
@@ -251,7 +251,7 @@ class ${tableName.pascalCase}Id  implements TableId {
 
     context.outputs[path.posix.join('client.dart')] =
         '''
-// ignore_for_file: type=lint, unused_import, unnecessary_question_mark, dead_code, unnecessary_non_null_assertion
+// ignore_for_file: type=lint, unused_import, unnecessary_question_mark, dead_code, unnecessary_null_comparison, unnecessary_non_null_assertion
 // ignore_for_file: unused_element, unnecessary_cast, override_on_non_overriding_member
 // ignore_for_file: strict_raw_type, inference_failure_on_untyped_parameter, invalid_use_of_internal_member
 import "dart:convert" as \$convert;
@@ -261,11 +261,15 @@ import "package:http/http.dart" as \$http;
 
 $moduleImports
 
+const String convexUrl = "$url";
+const String convexHttpUrl = "${_httpActionUrl(url)}";
+const String convexWebsiteUrl = convexHttpUrl;
+
 class MyConvexClient extends ConvexHttpClient {
   MyConvexClient({ConvexHttpClientOptions? options})
-    : super("$url", options: options);
+    : super(convexUrl, options: options);
 
-  final String httpUrl = "${_httpActionUrl(url)}";
+  final String httpUrl = convexHttpUrl;
 
 $httpFunctionsBuffer
 }
@@ -273,7 +277,7 @@ $httpFunctionsBuffer
 class MyConvexWebsocketClient extends ConvexClient {
   MyConvexWebsocketClient({
     ConvexClientOptions options = const ConvexClientOptions(),
-  }) : super("$url", options: options);
+  }) : super(convexUrl, options: options);
 }
 
 ${tree.children.isNotEmpty ? 'final api = ${tree.build(importPrefixes)};' : ''}
@@ -293,7 +297,7 @@ ${tree.children.isNotEmpty ? 'final api = ${tree.build(importPrefixes)};' : ''}
 
   void _buildLiterals(ClientBuildContext context) {
     final literalsBuffer = StringBuffer('''
-// ignore_for_file: type=lint, unused_import, unnecessary_question_mark, dead_code,unnecessary_non_null_assertion
+// ignore_for_file: type=lint, unused_import, unnecessary_question_mark, dead_code, unnecessary_null_comparison, unnecessary_non_null_assertion
 // ignore_for_file: unused_element, unnecessary_cast, override_on_non_overriding_member
 // ignore_for_file: strict_raw_type, inference_raw_type, inference_failure_on_untyped_parameter, invalid_use_of_internal_member
 import "package:convex_dart/convex_dart.dart";
@@ -500,7 +504,9 @@ class FunctionSpec extends BaseFunctionSpec with FunctionSpecMappable {
 
   String get dartFunctionName => stringToDart(functionName).camelCase;
 
-  String get className => stringToDart(functionName).pascalCase;
+  String get typeNameBase => stringToDart(functionName).pascalCase;
+
+  String get className => '\$$typeNameBase';
 
   String get convexFunctionIdentifier {
     // folder/file.ts:fnName
@@ -515,7 +521,7 @@ class FunctionSpec extends BaseFunctionSpec with FunctionSpecMappable {
       case JsAny():
         return 'Null';
       case JsObject():
-        return '${className}Args';
+        return '${typeNameBase}Args';
       default:
         throw UnimplementedError(
           'Unsupported argument type: ${args.type} for the function $functionName.',
@@ -523,7 +529,7 @@ class FunctionSpec extends BaseFunctionSpec with FunctionSpecMappable {
     }
   }
 
-  String get returnsTypeName => '${className}Return';
+  String get returnsTypeName => '${typeNameBase}Return';
 
   void build(FunctionBuildContext context, {required bool publicSerialize}) {
     if (context.headerBuffer.isEmpty) {
@@ -533,7 +539,7 @@ class FunctionSpec extends BaseFunctionSpec with FunctionSpecMappable {
       ).join('/');
 
       context.headerBuffer.write('''
-// ignore_for_file: type=lint, unused_import, unnecessary_question_mark, dead_code, dead_null_aware_expression, unnecessary_non_null_assertion
+// ignore_for_file: type=lint, unused_import, unnecessary_question_mark, dead_code, dead_null_aware_expression, unnecessary_null_comparison, unnecessary_non_null_assertion
 // ignore_for_file: unused_element, unnecessary_cast, override_on_non_overriding_member
 // ignore_for_file: strict_raw_type, inference_failure_on_untyped_parameter, invalid_use_of_internal_member
 import "dart:typed_data";
@@ -1220,8 +1226,9 @@ class JsRecord extends JsType with JsRecordMappable {
     required bool nullable,
   }) {
     final argName = context.tempNames.next();
+    final sourceName = nullable ? '($name)!' : name;
     final map =
-        "{for (final $argName in $name.entries) $argName.key: ${values.fieldType.serialize(context, "$argName.value", nullable: false)}}";
+        "{for (final $argName in $sourceName.entries) $argName.key: ${values.fieldType.serialize(context, "$argName.value", nullable: false)}}";
     if (nullable) {
       return '$name == null ? null : $map';
     }
@@ -1288,7 +1295,7 @@ class JsObject extends JsType with JsObjectMappable {
       if (entry.value.optional) {
         final fieldName = '$objectName.${safeDartKey(entry.key)}';
         buffer.write(
-          "if ($fieldName.isDefined) '${entry.key}': ${entry.value.fieldType.serialize(context, "$fieldName.asDefined().value", nullable: false)},",
+          "if ($fieldName.isDefined) '${entry.key}': ${entry.value.fieldType.serialize(context, "$fieldName.asDefined().value", nullable: true)},",
         );
       } else {
         buffer.write(
@@ -1297,7 +1304,8 @@ class JsObject extends JsType with JsObjectMappable {
       }
     }
     buffer.write('}');
-    final object = '((){ final $objectName = $name; return $buffer; })()';
+    final sourceName = nullable ? '($name)!' : name;
+    final object = '((){ final $objectName = $sourceName; return $buffer; })()';
     if (nullable) {
       return '$name == null ? null : $object';
     }
@@ -1350,8 +1358,9 @@ class JsArray extends JsType with JsArrayMappable {
     required bool nullable,
   }) {
     final argName = context.tempNames.next();
+    final sourceName = nullable ? '($name)!' : name;
     final list =
-        '$name.map<Object?>(($argName) => ${value.serialize(context, argName, nullable: false)}).toList(growable: false)';
+        '$sourceName.map<Object?>(($argName) => ${value.serialize(context, argName, nullable: false)}).toList(growable: false)';
     if (nullable) {
       return '$name == null ? null : $list';
     }

@@ -21,16 +21,32 @@ sealed class ConvexFunction<Args, Returns> {
 abstract class ConvexQuery<Args, Returns>
     extends ConvexFunction<Args, Returns> {
   ConvexQuery(super.path);
+
+  Stream<Returns> watch(ConvexClient client, Args args) {
+    return client.watch(this, args);
+  }
+
+  Future<Returns> call(ConvexClient client, Args args) {
+    return client.query(this, args);
+  }
 }
 
 abstract class ConvexMutation<Args, Returns>
     extends ConvexFunction<Args, Returns> {
   ConvexMutation(super.path);
+
+  Future<Returns> call(ConvexClient client, Args args) {
+    return client.mutation(this, args);
+  }
 }
 
 abstract class ConvexAction<Args, Returns>
     extends ConvexFunction<Args, Returns> {
   ConvexAction(super.path);
+
+  Future<Returns> call(ConvexClient client, Args args) {
+    return client.action(this, args);
+  }
 }
 
 extension ConvexHttpClientExtension on ConvexHttpClient {

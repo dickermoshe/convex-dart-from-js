@@ -22,6 +22,12 @@ Future<void> main(List<String> args) async {
   } on UsageException catch (error) {
     stderr.writeln(error);
     exitCode = 64;
+  } on Object catch (error, stackTrace) {
+    stderr.writeln('ERROR: $error');
+    if (args.contains('--verbose')) {
+      stderr.writeln(stackTrace);
+    }
+    exitCode = 1;
   }
 }
 
@@ -169,15 +175,17 @@ class GenerateCommand extends BetterCommand<CliOptions<dynamic>, int> {
   @override
   Future<int> runWithConfig(Configuration<CliOptions<dynamic>> config) async {
     final outputDirectory = config.value(CliOptions.outputDir);
+    final jsProjectDirectory = config.value(CliOptions.jsProjectDir);
     final once = config.value(CliOptions.once);
     final publicSerialize = config.value(CliOptions.publicSerialize);
     final prod = config.value(CliOptions.prod);
 
     logger.info('Resolving Convex deployment credentials...');
+    logger.debug('JS project directory: ${jsProjectDirectory.path}');
     final DeploymentCredentials creds;
     try {
       creds = await resolveCredentials(
-        workingDirectory: Directory.current.path,
+        workingDirectory: jsProjectDirectory.path,
         prod: prod,
       );
     } on Object catch (error) {
@@ -259,6 +267,10 @@ Directory _defaultOutputDir() {
   return Directory('lib/src/convex');
 }
 
+Directory _defaultJsProjectDir() {
+  return Directory.current;
+}
+
 String _preview(String output) {
   const maxLength = 500;
   if (output.length <= maxLength) {
@@ -275,6 +287,15 @@ enum CliOptions<V> implements OptionDefinition<V> {
       fromDefault: _defaultOutputDir,
       helpText: 'The directory to write generated Dart client files to.',
       mode: PathExistMode.mayExist,
+    ),
+  ),
+  jsProjectDir(
+    DirOption(
+      argName: 'js-project-dir',
+      fromDefault: _defaultJsProjectDir,
+      helpText:
+          'The root directory of the JS Convex project containing .env files.',
+      mode: PathExistMode.mustExist,
     ),
   ),
   publicSerialize(
