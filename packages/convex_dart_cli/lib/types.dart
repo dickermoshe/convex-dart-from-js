@@ -544,8 +544,8 @@ class FunctionSpec extends BaseFunctionSpec with FunctionSpecMappable {
 // ignore_for_file: strict_raw_type, inference_failure_on_untyped_parameter, invalid_use_of_internal_member
 import "dart:typed_data";
 import "package:convex_dart/convex_dart.dart";
-import "package:convex_dart/src/optional.dart";
-import "package:convex_dart/src/union.dart";
+import "package:convex_dart/optional.dart";
+import "package:convex_dart/union.dart";
 import "$importPathPrefix/schema.dart";
 import "$importPathPrefix/literals.dart";
 ''');
@@ -876,9 +876,9 @@ class JsLiteral extends JsType with JsLiteralMappable {
 class $literalTypeName implements Literal {
   const $literalTypeName();
   const $literalTypeName.validate(dynamic value):assert(value == $literalValueCode, r"Value mismatch for $literalTypeName");
-  
+
   @override
-  final value = $literalValueCode; 
+  final value = $literalValueCode;
 
   @override
   bool operator ==(Object other) {
@@ -986,7 +986,7 @@ class _WrapperUnion extends _BaseUnion {
 }
 
 // A union of literals, we will use an enhanced enum for this
-class _LiteralsUnion extends _BaseUnion with EquatableMixin {
+class _LiteralsUnion extends _BaseUnion with Equatable {
   final Set<JsLiteral> literals;
   _LiteralsUnion({required super.nullable, required this.literals});
 
@@ -1325,7 +1325,7 @@ class JsObject extends JsType with JsObjectMappable {
     for (final entry in value.entries) {
       if (entry.value.optional) {
         buffer.write(
-          "${safeDartKey(entry.key)}: $argName.containsKey('${entry.key}') ? Defined<${entry.value.fieldType.dartType(context)}>(${entry.value.fieldType.deserialize(context, "$argName['${entry.key}']", nullable: false)}) : Undefined<${entry.value.fieldType.dartType(context)}>(),",
+          "${safeDartKey(entry.key)}: $argName.containsKey('${entry.key}') ? Optional<${entry.value.fieldType.dartType(context)}>.defined(${entry.value.fieldType.deserialize(context, "$argName['${entry.key}']", nullable: false)}) : Optional<${entry.value.fieldType.dartType(context)}>.undefined(),",
         );
       } else {
         buffer.write(

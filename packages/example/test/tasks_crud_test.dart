@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
-import 'package:convex_dart/src/optional.dart';
+import 'package:convex_dart/optional.dart';
 import 'package:example/src/convex/client.dart';
 import 'package:test/test.dart';
 

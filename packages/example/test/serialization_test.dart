@@ -2,8 +2,8 @@
 
 import 'dart:typed_data';
 
-import 'package:convex_dart/src/optional.dart';
-import 'package:convex_dart/src/union.dart';
+import 'package:convex_dart/optional.dart';
+import 'package:convex_dart/union.dart';
 import 'package:example/src/convex/functions/generic_functions.dart'
     as generic_functions;
 import 'package:example/src/convex/literals.dart';

@@ -131,6 +131,11 @@ void main() {
       expect(module, contains(r'class $UpdateTask extends ConvexMutation'));
       expect(module, contains('typedef UpdateTaskArgs'));
       expect(module, contains('Optional<String> text'));
+      expect(module, contains('import "package:convex_dart/optional.dart";'));
+      expect(module, contains('Optional<String>.defined('));
+      expect(module, contains('Optional<String>.undefined()'));
+      expect(module, isNot(contains('Defined<String>(')));
+      expect(module, isNot(contains('Undefined<String>()')));
       expect(module, contains("'id': _v0.id.name"));
       expect(module, contains("if (_v0.text.isDefined) 'text':"));
       expect(module, contains('typedef UpdateTaskReturn = TasksId;'));

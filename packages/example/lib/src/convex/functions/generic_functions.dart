@@ -3,8 +3,8 @@
 // ignore_for_file: strict_raw_type, inference_failure_on_untyped_parameter, invalid_use_of_internal_member
 import "dart:typed_data";
 import "package:convex_dart/convex_dart.dart";
-import "package:convex_dart/src/optional.dart";
-import "package:convex_dart/src/union.dart";
+import "package:convex_dart/optional.dart";
+import "package:convex_dart/union.dart";
 import "../schema.dart";
 import "../literals.dart";
 
